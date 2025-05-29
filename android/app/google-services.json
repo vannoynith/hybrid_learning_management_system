@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "630453007440",
+    "project_id": "ai-learn-db",
+    "storage_bucket": "ai-learn-db.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:630453007440:android:76f52469f9000058cecd55",
+        "android_client_info": {
+          "package_name": "com.example.ai_hlms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMOZo7YBC1IDIwVL6GDliBv6BH5HF5_kI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:630453007440:android:6444a977a954c5cacecd55",
+        "android_client_info": {
+          "package_name": "com.example.ai_learn"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMOZo7YBC1IDIwVL6GDliBv6BH5HF5_kI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:630453007440:android:b7fbab7d03f7a0dfcecd55",
+        "android_client_info": {
+          "package_name": "com.example.hybridlms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMOZo7YBC1IDIwVL6GDliBv6BH5HF5_kI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
