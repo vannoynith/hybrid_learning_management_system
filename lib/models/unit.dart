@@ -10,6 +10,7 @@ class Unit {
   final String url;
   final String description;
   final int order;
+  final String uploadedBy;
   final DateTime? createdAt;
 
   Unit({
@@ -22,20 +23,22 @@ class Unit {
     required this.url,
     required this.description,
     required this.order,
+    required this.uploadedBy,
     this.createdAt,
   });
 
   factory Unit.fromMap(Map<String, dynamic> map) {
     return Unit(
-      id: map['id'] as String,
-      courseId: map['courseId'] as String,
-      moduleId: map['moduleId'] as String,
-      lessonId: map['lessonId'] as String,
-      title: map['title'] as String,
-      type: map['type'] as String,
-      url: map['url'] as String,
-      description: map['description'] as String,
-      order: map['order'] as int,
+      id: map['id'] as String? ?? '',
+      courseId: map['courseId'] as String? ?? '',
+      moduleId: map['moduleId'] as String? ?? '',
+      lessonId: map['lessonId'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      type: map['type'] as String? ?? '',
+      url: map['url'] as String? ?? '',
+      description: map['description'] as String? ?? '',
+      order: map['order'] as int? ?? 0,
+      uploadedBy: map['uploadedBy'] as String? ?? '',
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -51,7 +54,11 @@ class Unit {
       'url': url,
       'description': description,
       'order': order,
-      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
+      'uploadedBy': uploadedBy,
+      'createdAt':
+          createdAt != null
+              ? Timestamp.fromDate(createdAt!)
+              : FieldValue.serverTimestamp(),
     };
   }
 }

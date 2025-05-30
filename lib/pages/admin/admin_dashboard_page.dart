@@ -122,7 +122,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load dashboard data')),
+          SnackBar(content: Text('Failed to load dashboard data: $e')),
         );
       }
     } finally {
@@ -146,7 +146,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to log out')));
+        ).showSnackBar(SnackBar(content: Text('Failed to log out: $e')));
       }
     }
   }
@@ -195,7 +195,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to load account details')),
+        SnackBar(content: Text('Failed to load account details: $e')),
       );
     }
   }
@@ -919,19 +919,43 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     required IconData icon,
     required String route,
   }) {
-    return ElevatedButton.icon(
-      onPressed: () {
-        Navigator.pushNamed(context, route);
+    return Builder(
+      builder: (BuildContext buttonContext) {
+        return ElevatedButton.icon(
+          onPressed: () async {
+            debugPrint('Button pressed: $label, navigating to $route');
+            try {
+              // Check if the route exists in the Navigator's route table
+              if (Navigator.of(buttonContext).canPop() ||
+                  ModalRoute.of(buttonContext)?.settings.name != route) {
+                await Navigator.pushNamed(buttonContext, route);
+                debugPrint('Successfully navigated to $route');
+              } else {
+                debugPrint('Route $route is already the current route');
+                ScaffoldMessenger.of(buttonContext).showSnackBar(
+                  SnackBar(content: Text('Already on $label page')),
+                );
+              }
+            } catch (e) {
+              debugPrint('Navigation error for route $route: $e');
+              ScaffoldMessenger.of(buttonContext).showSnackBar(
+                SnackBar(content: Text('Failed to navigate to $label: $e')),
+              );
+            }
+          },
+          icon: Icon(icon, size: 20),
+          label: Text(label),
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            minimumSize: const Size(140, 48),
+            backgroundColor: Theme.of(context).primaryColor,
+            foregroundColor: Colors.white,
+          ),
+        );
       },
-      icon: Icon(icon, size: 20),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        minimumSize: const Size(140, 48),
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-      ),
     );
   }
 }

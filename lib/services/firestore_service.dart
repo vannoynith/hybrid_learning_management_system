@@ -1,11 +1,11 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:hybridlms/models/course.dart';
 import '../models/user.dart' as firebase_user;
-import '../models/course.dart';
-
 import '../models/interaction.dart';
-import '../models/lecturer.dart';
 import '../models/module.dart';
 import '../models/lesson.dart';
 import '../models/unit.dart';
@@ -13,8 +13,8 @@ import '../models/unit.dart';
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final CloudinaryPublic _cloudinary = CloudinaryPublic(
-    'your_cloud_name',
-    'your_upload_preset',
+    'dsdfxombn',
+    'hybridlms',
     cache: false,
   );
 
@@ -46,30 +46,29 @@ class FirestoreService {
     String role, {
     String? username,
     String? displayName,
-    String? dateOfBirth,
-    String? address,
     String? phoneNumber,
+    String? address,
     String? position,
+    String? profileImageUrl,
+    String? userSex,
+    String? dateOfBirth,
+    bool active = true,
   }) async {
     try {
-      if (uid.isEmpty) throw Exception('UID cannot be empty');
-      if (email.isEmpty) throw Exception('Email cannot be empty');
-      if (!['student', 'admin', 'lecturer'].contains(role)) {
-        throw Exception('Invalid role: $role');
-      }
-      await _db.collection('users').doc(uid).set({
+      await db.collection('users').doc(uid).set({
         'uid': uid,
         'email': email,
-        'username': username,
         'role': role,
-        'displayName': displayName ?? username ?? email.split('@')[0],
-        'dateOfBirth': dateOfBirth,
-        'address': address,
+        'username': username,
+        'displayName': displayName,
         'phoneNumber': phoneNumber,
+        'address': address,
         'position': position,
+        'profileImageUrl': profileImageUrl,
+        'userSex': userSex,
+        'dateOfBirth': dateOfBirth,
+        'active': active,
         'createdAt': FieldValue.serverTimestamp(),
-        'active': true,
-        'suspended': false,
         'lastActive': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
@@ -239,6 +238,7 @@ class FirestoreService {
     String lecturerId,
     String token, {
     String category = 'New',
+    String? thumbnailUrl,
   }) async {
     try {
       if (title.isEmpty) throw Exception('Title cannot be empty');
@@ -253,7 +253,9 @@ class FirestoreService {
         'lecturerId': lecturerId,
         'token': token,
         'category': category,
+        'thumbnailUrl': thumbnailUrl,
         'createdAt': FieldValue.serverTimestamp(),
+        'active': true,
       });
       await docRef.update({'id': docRef.id});
 
@@ -272,31 +274,230 @@ class FirestoreService {
     }
   }
 
-  /// Adds a material to a course with validation.
+  /// Uploads a file to Cloudinary with structured folder hierarchy and returns the secure URL.
+  Future<String> uploadToCloudinary(
+    dynamic file, // String for mobile, Uint8List for web
+    String type,
+    String userId, {
+    String? courseId,
+    bool isProfilePic = false,
+    bool isThumbnail = false,
+    bool isMaterial = false,
+  }) async {
+    try {
+      if (file == null) throw Exception('File cannot be null');
+      if (!['video', 'pdf', 'image'].contains(type)) {
+        throw Exception('Invalid content type: $type');
+      }
+      if (userId.isEmpty) throw Exception('User ID cannot be empty');
+
+      // Validate file type based on platform
+      if (!kIsWeb && file is! String) {
+        throw Exception('File must be a path on mobile');
+      }
+      if (kIsWeb && file is! Uint8List) {
+        throw Exception('File must be bytes on web');
+      }
+
+      // Validate file size (mobile only)
+      if (!kIsWeb && file is String) {
+        final fileSize = await File(file).length();
+        if (type == 'video' && fileSize > 100 * 1024 * 1024) {
+          throw Exception('Video file size exceeds 100MB limit');
+        } else if (fileSize > 10 * 1024 * 1024) {
+          throw Exception('File size exceeds 10MB limit');
+        }
+      }
+
+      // Define folder structure
+      String folderPath = 'hybridlms';
+      if (isProfilePic) {
+        folderPath += '/lecturers/$userId/profile';
+      } else if (isThumbnail) {
+        if (courseId == null || courseId.isEmpty) {
+          throw Exception('Course ID required for thumbnail');
+        }
+        folderPath += '/courses/$courseId/thumbnails';
+      } else if (isMaterial) {
+        if (courseId == null || courseId.isEmpty) {
+          throw Exception('Course ID required for course material');
+        }
+        folderPath += '/courses/$courseId/materials/$type';
+      } else {
+        folderPath += '/users/$userId/uploads';
+      }
+
+      // Generate unique public ID
+      final publicId = '${userId}_${DateTime.now().millisecondsSinceEpoch}';
+
+      CloudinaryResponse response;
+      if (!kIsWeb && file is String) {
+        response = await _cloudinary.uploadFile(
+          CloudinaryFile.fromFile(
+            file,
+            folder: folderPath,
+            publicId: publicId,
+            resourceType:
+                type == 'video'
+                    ? CloudinaryResourceType.Video
+                    : type == 'image'
+                    ? CloudinaryResourceType.Image
+                    : CloudinaryResourceType.Auto,
+          ),
+        );
+      } else if (kIsWeb && file is Uint8List) {
+        response = await _cloudinary.uploadFile(
+          CloudinaryFile.fromBytesData(
+            file,
+            folder: folderPath,
+            publicId: publicId,
+            resourceType:
+                type == 'video'
+                    ? CloudinaryResourceType.Video
+                    : type == 'image'
+                    ? CloudinaryResourceType.Image
+                    : CloudinaryResourceType.Auto,
+            identifier: '',
+          ),
+        );
+      } else {
+        throw Exception('Unsupported file type or platform');
+      }
+
+      if (response.secureUrl == null) {
+        throw Exception('Failed to upload file to Cloudinary');
+      }
+
+      // Log the interaction
+      final interaction = Interaction(
+        userId: userId,
+        action:
+            isProfilePic
+                ? 'upload_profile_picture'
+                : isThumbnail
+                ? 'upload_course_thumbnail'
+                : isMaterial
+                ? 'upload_course_material'
+                : 'upload_file',
+        targetId: isProfilePic ? userId : courseId ?? userId,
+        courseId: courseId,
+        details: 'Uploaded $type to $folderPath/$publicId',
+        timestamp: Timestamp.now(),
+      );
+      await logInteraction(interaction);
+
+      return response.secureUrl!;
+    } catch (e) {
+      throw Exception('Failed to upload to Cloudinary: $e');
+    }
+  }
+
+  /// Uploads a profile picture for a lecturer and updates the user document.
+  Future<void> uploadProfilePicture(
+    dynamic file, // String for mobile, Uint8List for web
+    String userId,
+  ) async {
+    try {
+      if (userId.isEmpty) throw Exception('User ID cannot be empty');
+      final userDoc = await _db.collection('users').doc(userId).get();
+      if (!userDoc.exists || userDoc.get('role') != 'lecturer') {
+        throw Exception('Invalid or non-lecturer user: $userId');
+      }
+
+      final url = await uploadToCloudinary(
+        file,
+        'image',
+        userId,
+        isProfilePic: true,
+      );
+
+      await _db.collection('users').doc(userId).update({
+        'profileImageUrl': url,
+        'lastModifiedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Failed to upload profile picture: $e');
+    }
+  }
+
+  /// Uploads a thumbnail for a course and updates the course document.
+  Future<void> uploadCourseThumbnail(
+    dynamic file, // String for mobile, Uint8List for web
+    String courseId,
+    String userId,
+  ) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (userId.isEmpty) throw Exception('User ID cannot be empty');
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+      final userDoc = await _db.collection('users').doc(userId).get();
+      if (!userDoc.exists || userDoc.get('role') != 'lecturer') {
+        throw Exception('Invalid or non-lecturer user: $userId');
+      }
+
+      final url = await uploadToCloudinary(
+        file,
+        'image',
+        userId,
+        courseId: courseId,
+        isThumbnail: true,
+      );
+
+      await _db.collection('courses').doc(courseId).update({
+        'thumbnailUrl': url,
+        'lastModifiedBy': userId,
+        'lastModifiedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Failed to upload course thumbnail: $e');
+    }
+  }
+
+  /// Adds a material to a course with validation and file upload.
   Future<void> addCourseMaterial(
     String courseId,
     String type,
-    String url,
+    dynamic file, // String for mobile, Uint8List for web
     String lecturerId,
   ) async {
     try {
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
       if (type.isEmpty) throw Exception('Type cannot be empty');
-      if (url.isEmpty) throw Exception('URL cannot be empty');
+      if (file == null) throw Exception('File cannot be null');
       if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
       final courseDoc = await _db.collection('courses').doc(courseId).get();
       if (!courseDoc.exists) throw Exception('Course not found: $courseId');
-      await _db.collection('courses').doc(courseId).collection('materials').add(
-        {'type': type, 'url': url, 'uploadedAt': FieldValue.serverTimestamp()},
+      if (courseDoc.get('lecturerId') != lecturerId) {
+        throw Exception('Unauthorized: Lecturer does not own this course');
+      }
+
+      final url = await uploadToCloudinary(
+        file,
+        type,
+        lecturerId,
+        courseId: courseId,
+        isMaterial: true,
       );
+
+      final materialRef = await _db
+          .collection('courses')
+          .doc(courseId)
+          .collection('materials')
+          .add({
+            'type': type,
+            'url': url,
+            'uploadedBy': lecturerId,
+            'uploadedAt': FieldValue.serverTimestamp(),
+          });
 
       // Log the interaction
       final interaction = Interaction(
         userId: lecturerId,
         action: 'upload_material',
-        targetId: courseId,
+        targetId: materialRef.id,
         courseId: courseId,
-        details: 'Uploaded material to course: $courseId',
+        details: 'Uploaded $type material to course: $courseId',
         timestamp: Timestamp.now(),
       );
       await logInteraction(interaction);
@@ -305,46 +506,16 @@ class FirestoreService {
     }
   }
 
-  /// Uploads a file to Cloudinary and returns the secure URL.
-  Future<String> uploadToCloudinary(String filePath, String type) async {
-    try {
-      if (filePath.isEmpty) throw Exception('File path cannot be empty');
-      if (!['video', 'pdf', 'image'].contains(type)) {
-        throw Exception('Invalid content type: $type');
-      }
-      final response = await _cloudinary.uploadFile(
-        CloudinaryFile.fromFile(
-          filePath,
-          resourceType:
-              type == 'video'
-                  ? CloudinaryResourceType.Video
-                  : type == 'image'
-                  ? CloudinaryResourceType.Image
-                  : CloudinaryResourceType.Auto,
-        ),
-      );
-      if (response.secureUrl == null) {
-        throw Exception('Failed to upload file to Cloudinary');
-      }
-      return response.secureUrl!;
-    } catch (e) {
-      throw Exception('Failed to upload to Cloudinary: $e');
-    }
-  }
-
   /// Retrieves all courses for a lecturer.
   Future<List<Course>> getCoursesForLecturer(String lecturerId) async {
     try {
-      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
-      QuerySnapshot querySnapshot =
-          await _db
+      final snapshot =
+          await db
               .collection('courses')
               .where('lecturerId', isEqualTo: lecturerId)
               .orderBy('createdAt', descending: true)
               .get();
-      return querySnapshot.docs
-          .map((doc) => Course.fromMap(doc.data() as Map<String, dynamic>))
-          .toList();
+      return snapshot.docs.map((doc) => Course.fromMap(doc.data())).toList();
     } catch (e) {
       throw Exception('Failed to get courses: $e');
     }
@@ -865,6 +1036,7 @@ class FirestoreService {
     }
   }
 */
+
   /// Saves user progress for a course.
   Future<void> saveUserProgress(
     String userId,
@@ -947,6 +1119,7 @@ class FirestoreService {
           'lecturerId': 'sample_lecturer',
           'token': 'sample_token',
           'category': 'Popular',
+          'active': true,
           'createdAt': FieldValue.serverTimestamp(),
         });
         await _db.collection('courses').doc('course2').set({
@@ -956,6 +1129,7 @@ class FirestoreService {
           'lecturerId': 'sample_lecturer',
           'token': 'sample_token',
           'category': 'New',
+          'active': true,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
@@ -997,6 +1171,259 @@ class FirestoreService {
       }
     } catch (e) {
       throw Exception('Failed to initialize collections: $e');
+    }
+  }
+
+  /// Retrieves all active courses, optionally filtered by category or lecturer.
+  Future<List<Course>> getAllActiveCourses({
+    String? category,
+    String? lecturerId,
+  }) async {
+    try {
+      Query query = _db
+          .collection('courses')
+          .where('active', isEqualTo: true)
+          .orderBy('createdAt', descending: true);
+      if (category != null && category.isNotEmpty) {
+        query = query.where('category', isEqualTo: category);
+      }
+      if (lecturerId != null && lecturerId.isNotEmpty) {
+        query = query.where('lecturerId', isEqualTo: lecturerId);
+      }
+      QuerySnapshot querySnapshot = await query.get();
+      return querySnapshot.docs
+          .map((doc) => Course.fromMap(doc.data() as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get active courses: $e');
+    }
+  }
+
+  /// Updates course details and logs the interaction.
+  Future<void> updateCourse(
+    String courseId,
+    String adminUid, {
+    String? title,
+    String? description,
+    String? category,
+    String? token,
+    String? thumbnailUrl,
+  }) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (adminUid.isEmpty) throw Exception('Admin UID cannot be empty');
+
+      // Verify admin exists and has admin role
+      final adminDoc = await _db.collection('users').doc(adminUid).get();
+      if (!adminDoc.exists || adminDoc.get('role') != 'admin') {
+        throw Exception('Invalid or non-admin user: $adminUid');
+      }
+
+      // Verify course exists
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+
+      final updateData = <String, dynamic>{};
+      if (title != null && title.isNotEmpty) updateData['title'] = title;
+      if (description != null) updateData['description'] = description;
+      if (category != null && category.isNotEmpty)
+        updateData['category'] = category;
+      if (token != null && token.isNotEmpty) updateData['token'] = token;
+      if (thumbnailUrl != null) updateData['thumbnailUrl'] = thumbnailUrl;
+      updateData['lastModifiedBy'] = adminUid;
+      updateData['lastModifiedAt'] = FieldValue.serverTimestamp();
+
+      await _db.collection('courses').doc(courseId).update(updateData);
+
+      // Log the interaction
+      final interaction = Interaction(
+        userId: adminUid,
+        action: 'update_course',
+        targetId: courseId,
+        courseId: courseId,
+        details: 'Updated course: ${title ?? courseDoc.get('title')}',
+        timestamp: Timestamp.now(),
+      );
+      await logInteraction(interaction);
+    } catch (e) {
+      throw Exception('Failed to update course: $e');
+    }
+  }
+
+  /// Marks a course as inactive (soft delete) and logs the interaction.
+  Future<void> deleteCourse(String courseId, String adminUid) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (adminUid.isEmpty) throw Exception('Admin UID cannot be empty');
+
+      // Verify admin exists and has admin role
+      final adminDoc = await _db.collection('users').doc(adminUid).get();
+      if (!adminDoc.exists || adminDoc.get('role') != 'admin') {
+        throw Exception('Invalid or non-admin user: $adminUid');
+      }
+
+      // Verify course exists
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+
+      await _db.collection('courses').doc(courseId).update({
+        'active': false,
+        'lastModifiedBy': adminUid,
+        'lastModifiedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Log the interaction
+      final interaction = Interaction(
+        userId: adminUid,
+        action: 'delete_course',
+        targetId: courseId,
+        courseId: courseId,
+        details: 'Deleted course: ${courseDoc.get('title')}',
+        timestamp: Timestamp.now(),
+      );
+      await logInteraction(interaction);
+    } catch (e) {
+      throw Exception('Failed to delete course: $e');
+    }
+  }
+
+  /// Assigns or reassigns a lecturer to a course and logs the interaction.
+  Future<void> assignLecturerToCourse(
+    String courseId,
+    String lecturerId,
+    String adminUid,
+  ) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (lecturerId.isEmpty) {
+        throw Exception('Lecturer ID cannot be empty');
+      }
+      if (adminUid.isEmpty) throw Exception('Admin UID cannot be empty');
+      // Verify admin exists and has admin role
+      final adminDoc = await _db.collection('users').doc(adminUid).get();
+      if (!adminDoc.exists || adminDoc.get('role') != 'admin') {
+        throw Exception('Invalid or non-admin user: $adminUid');
+      }
+
+      // Verify course exists
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+
+      // Verify lecturer exists and has lecturer role
+      final lecturerDoc = await _db.collection('users').doc(lecturerId).get();
+      if (!lecturerDoc.exists || lecturerDoc.get('role') != 'lecturer') {
+        throw Exception('Invalid or non-existent lecturer: $lecturerId');
+      }
+
+      await _db.collection('courses').doc(courseId).update({
+        'lecturerId': lecturerId,
+        'lastModifiedBy': adminUid,
+        'lastModifiedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Log the interaction
+      final interaction = Interaction(
+        userId: adminUid,
+        action: 'assign_lecturer',
+        targetId: courseId,
+        courseId: courseId,
+        details:
+            'Assigned lecturer $lecturerId to course: ${courseDoc.get('title')}',
+        timestamp: Timestamp.now(),
+      );
+      await logInteraction(interaction);
+    } catch (e) {
+      throw Exception('Failed to assign lecturer: $e');
+    }
+  }
+
+  /// Retrieves all materials for a course.
+  Future<List<Map<String, dynamic>>> getCourseMaterials(String courseId) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      QuerySnapshot querySnapshot =
+          await _db
+              .collection('courses')
+              .doc(courseId)
+              .collection('materials')
+              .orderBy('uploadedAt', descending: true)
+              .get();
+      return querySnapshot.docs
+          .map((doc) => doc.data() as Map<String, dynamic>)
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get course materials: $e');
+    }
+  }
+
+  /// Retrieves interactions related to a specific course.
+  Future<List<Interaction>> getCourseInteractions(String courseId) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      QuerySnapshot querySnapshot =
+          await _db
+              .collection('interactions')
+              .where('courseId', isEqualTo: courseId)
+              .orderBy('timestamp', descending: true)
+              .limit(50)
+              .get();
+
+      List<Interaction> interactions = [];
+      for (var doc in querySnapshot.docs) {
+        try {
+          final data = doc.data() as Map<String, dynamic>;
+          if (data['userId'] is String &&
+              data['action'] is String &&
+              data['timestamp'] is Timestamp) {
+            // Fetch admin name
+            String? adminName;
+            final adminDoc =
+                await _db.collection('users').doc(data['userId']).get();
+            if (adminDoc.exists) {
+              adminName =
+                  adminDoc.data()?['email']?.split('@')[0] ?? 'Unknown Admin';
+            }
+
+            // Fetch target user name if targetId exists
+            String? targetName;
+            if (data['targetId'] != null) {
+              final targetDoc =
+                  await _db.collection('users').doc(data['targetId']).get();
+              if (targetDoc.exists) {
+                targetName =
+                    targetDoc.data()?['email']?.split('@')[0] ?? 'Unknown User';
+              }
+            }
+
+            interactions.add(
+              Interaction(
+                userId: data['userId'],
+                action: data['action'],
+                targetId: data['targetId'],
+                details: data['details'],
+                courseId: data['courseId'],
+                timestamp: data['timestamp'],
+                adminName: adminName,
+                targetName: targetName,
+              ),
+            );
+          } else {
+            debugPrint(
+              'Skipping malformed interaction document: ${doc.id} - Missing required fields',
+            );
+          }
+        } catch (e) {
+          debugPrint('Error parsing interaction document ${doc.id}: $e');
+        }
+      }
+      return interactions;
+    } catch (e) {
+      if (e.toString().contains('failed-precondition')) {
+        throw Exception(
+          'Failed to get course interactions: The query requires an index. Please create it in the Firebase Console at https://console.firebase.google.com/project/al-learn-db/firestore/indexes.',
+        );
+      }
+      throw Exception('Failed to get course interactions: $e');
     }
   }
 }

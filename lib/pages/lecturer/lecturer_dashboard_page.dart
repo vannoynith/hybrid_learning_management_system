@@ -41,9 +41,7 @@ class _LecturerDashboardPageState extends State<LecturerDashboardPage> {
     setState(() => _isLoading = true);
     try {
       final currentUser = _authService.getCurrentUser();
-      if (currentUser == null) {
-        throw Exception('No user logged in');
-      }
+      if (currentUser == null) throw Exception('No user logged in');
       _courses = await _firestoreService.getCoursesForLecturer(currentUser.uid);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -86,7 +84,6 @@ class _LecturerDashboardPageState extends State<LecturerDashboardPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lecturer Dashboard'),
-        elevation: 0,
         backgroundColor: Theme.of(context).primaryColor,
         actions: [
           IconButton(
@@ -185,6 +182,19 @@ class _LecturerDashboardPageState extends State<LecturerDashboardPage> {
                               else
                                 ...filteredCourses.map(
                                   (course) => ListTile(
+                                    leading:
+                                        course.thumbnailUrl != null
+                                            ? ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: Image.network(
+                                                course.thumbnailUrl!,
+                                                width: 60,
+                                                height: 60,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            )
+                                            : const Icon(Icons.book, size: 40),
                                     title: Text(
                                       course.title,
                                       style: const TextStyle(

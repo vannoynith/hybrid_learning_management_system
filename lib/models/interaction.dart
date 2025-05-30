@@ -7,8 +7,8 @@ class Interaction {
   final String? details;
   final String? courseId;
   final Timestamp timestamp;
-  final String? adminName; // New field for admin's name
-  final String? targetName; // New field for target's name
+  final String? adminName;
+  final String? targetName;
 
   Interaction({
     required this.userId,
