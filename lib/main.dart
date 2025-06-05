@@ -2,9 +2,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/animation.dart';
 import 'package:hybridlms/models/course.dart';
-import 'package:hybridlms/pages/lecturer/create_course_page.dart';
+//import 'package:hybridlms/pages/lecturer/create_course_page.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_settings_page.dart';
-import 'package:hybridlms/pages/lecturer/manage_course_page.dart';
+//import 'package:hybridlms/pages/lecturer/manage_course_page.dart';
 import 'routes.dart';
 import 'pages/signup_page.dart';
 import 'theme.dart';
@@ -19,7 +19,7 @@ import 'pages/chat_page.dart';
 //import 'pages/student/quiz_page.dart';
 //import 'pages/student/lecturers_page.dart';
 import 'pages/admin/admin_dashboard_page.dart';
-import 'pages/lecturer/lecturer_dashboard_page.dart';
+//import 'pages/lecturer/lecturer_dashboard_page.dart';
 //import 'pages/student/profile_edit_page.dart';
 import 'pages/admin/create_admin_page.dart';
 import 'pages/admin/create_lecturer_page.dart';
@@ -77,29 +77,29 @@ class MyApp extends StatelessWidget {
         //     (context) => const FadeTransitionPage(child: ProfileEditPage()),
         Routes.adminDashboard:
             (context) => const FadeTransitionPage(child: AdminDashboardPage()),
-        Routes.lecturerDashboard:
-            (context) =>
-                const FadeTransitionPage(child: LecturerDashboardPage()),
-        Routes.createAdmin:
-            (context) => const FadeTransitionPage(child: CreateAdminPage()),
-        Routes.createLecturer:
-            (context) => const FadeTransitionPage(child: CreateLecturerPage()),
-        Routes.userManagement:
-            (context) => const FadeTransitionPage(child: UserManagementPage()),
-        Routes.createCourse:
-            (context) => const FadeTransitionPage(child: CreateCoursePage()),
-        Routes.manageCourse: (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Course?;
-          if (args == null) {
-            return const FadeTransitionPage(
-              child: Scaffold(body: Center(child: Text('No course provided'))),
-            );
-          }
-          return FadeTransitionPage(child: ManageCoursePage(course: args));
-        },
-        Routes.lecturerSettings:
-            (context) =>
-                const FadeTransitionPage(child: LecturerSettingsPage()),
+        //   Routes.lecturerDashboard:
+        //       (context) =>
+        //           const FadeTransitionPage(child: LecturerDashboardPage()),
+        //   Routes.createAdmin:
+        //       (context) => const FadeTransitionPage(child: CreateAdminPage()),
+        //   Routes.createLecturer:
+        //       (context) => const FadeTransitionPage(child: CreateLecturerPage()),
+        //   Routes.userManagement:
+        //       (context) => const FadeTransitionPage(child: UserManagementPage()),
+        //   Routes.createCourse:
+        //       (context) => const FadeTransitionPage(child: CreateCoursePage()),
+        //   Routes.manageCourse: (context) {
+        //     final args = ModalRoute.of(context)?.settings.arguments as Course?;
+        //     if (args == null) {
+        //       return const FadeTransitionPage(
+        //         child: Scaffold(body: Center(child: Text('No course provided'))),
+        //       );
+        //     }
+        //     return FadeTransitionPage(child: ManageCoursePage(course: args));
+        //   },
+        //   Routes.lecturerSettings:
+        //       (context) =>
+        //           const FadeTransitionPage(child: LecturerSettingsPage()),
       },
     );
   }

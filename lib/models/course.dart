@@ -3,51 +3,58 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class Course {
   final String id;
   final String title;
-  final String description;
+  final String? description;
   final String lecturerId;
   final String token;
-  final String category;
+  final String? category;
+  final bool active;
   final String? thumbnailUrl;
-  final String? previewVideoUrl;
-  final Timestamp? createdAt;
+  final String? expiryDate;
+  final Timestamp createdAt;
+  final Timestamp updatedAt;
 
   Course({
     required this.id,
     required this.title,
-    required this.description,
+    this.description,
     required this.lecturerId,
     required this.token,
-    required this.category,
+    this.category,
+    required this.active,
     this.thumbnailUrl,
-    this.previewVideoUrl,
-    this.createdAt,
+    this.expiryDate,
+    required this.createdAt,
+    required this.updatedAt,
   });
 
-  factory Course.fromMap(Map<String, dynamic> map) {
+  factory Course.fromMap(Map<String, dynamic> map, String id) {
     return Course(
-      id: map['id'] as String? ?? '',
-      title: map['title'] as String? ?? '',
-      description: map['description'] as String? ?? '',
-      lecturerId: map['lecturerId'] as String? ?? '',
-      token: map['token'] as String? ?? '',
-      category: map['category'] as String? ?? 'New',
-      thumbnailUrl: map['thumbnailUrl'] as String?,
-      previewVideoUrl: map['previewVideoUrl'] as String?,
-      createdAt: map['createdAt'] as Timestamp?,
+      id: id,
+      title: map['title'] ?? '',
+      description: map['description'],
+      lecturerId: map['lecturerId'] ?? '',
+      token: map['token'] ?? '',
+      category: map['category'],
+      active: map['active'] ?? false,
+      thumbnailUrl: map['thumbnailUrl'],
+      expiryDate: map['expiryDate'],
+      createdAt: map['createdAt'] ?? Timestamp.now(),
+      updatedAt: map['updatedAt'] ?? Timestamp.now(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
       'title': title,
       'description': description,
       'lecturerId': lecturerId,
       'token': token,
       'category': category,
+      'active': active,
       'thumbnailUrl': thumbnailUrl,
-      'previewVideoUrl': previewVideoUrl,
-      'createdAt': createdAt ?? FieldValue.serverTimestamp(),
+      'expiryDate': expiryDate,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
     };
   }
 }
