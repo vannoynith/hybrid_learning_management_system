@@ -15,11 +15,14 @@ class Routes {
   static const String quiz = '/quiz';
   static const String profileEdit = '/profileEdit';
   static const String adminDashboard = '/admin-dashboard';
-  static const String lecturerDashboard = '/lecturer-dashboard';
+  static const String lecturerDashboard = '/lecturer_dashboard';
   static const String createAdmin = '/create_admin';
   static const String createLecturer = '/create_lecturer';
   static const String userManagement = '/user_management';
-  static const String createCourse = '/create_course';
-  static const String manageCourse = '/manage_course';
-  static const String lecturerSettings = '/lecturer_settings';
+  static const String lecturerSettingsPage = '/lecturer_settings';
+  static const String courseEditor = '/course_editor';
+  static const String courseManagement = '/course_management';
+  static const String contentViewPage = '/content_viewer_page';
+  static const String changePasswordForLecturer =
+      '/change_password_for_lecturer_page';
 }

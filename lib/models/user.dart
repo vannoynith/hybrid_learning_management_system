@@ -16,6 +16,7 @@ class User {
   final bool active;
   final bool? suspended;
   final DateTime? lastActive;
+  final DateTime? passwordUpdatedAt;
 
   User({
     required this.uid,
@@ -33,6 +34,7 @@ class User {
     required this.active,
     this.suspended,
     this.lastActive,
+    this.passwordUpdatedAt,
   });
 
   factory User.fromMap(Map<String, dynamic> map) {
@@ -52,6 +54,7 @@ class User {
       active: map['active'] as bool? ?? true,
       suspended: map['suspended'] as bool?,
       lastActive: (map['lastActive'] as Timestamp?)?.toDate(),
+      passwordUpdatedAt: (map['passwordUpdatedAt'] as Timestamp?)?.toDate(),
     );
   }
 

@@ -3,58 +3,58 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class Course {
   final String id;
   final String title;
-  final String? description;
+  final String description;
   final String lecturerId;
-  final String token;
-  final String? category;
-  final bool active;
+  final bool isPublished;
+  final Timestamp? createdAt;
   final String? thumbnailUrl;
-  final String? expiryDate;
-  final Timestamp createdAt;
-  final Timestamp updatedAt;
+  final List<Map<String, dynamic>>? modules;
+  final List<dynamic> contentUrls;
+  final int enrolledCount;
+  final String? category;
 
   Course({
     required this.id,
     required this.title,
-    this.description,
+    required this.description,
     required this.lecturerId,
-    required this.token,
-    this.category,
-    required this.active,
+    this.isPublished = false,
+    this.createdAt,
     this.thumbnailUrl,
-    this.expiryDate,
-    required this.createdAt,
-    required this.updatedAt,
+    this.modules,
+    this.contentUrls = const [],
+    this.enrolledCount = 0,
+    this.category,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'lecturerId': lecturerId,
+      'isPublished': isPublished,
+      'createdAt': createdAt ?? FieldValue.serverTimestamp(),
+      'thumbnailUrl': thumbnailUrl,
+      'contentUrls': contentUrls,
+      'enrolledCount': enrolledCount,
+      'category': category,
+    };
+  }
 
   factory Course.fromMap(Map<String, dynamic> map, String id) {
     return Course(
       id: id,
-      title: map['title'] ?? '',
-      description: map['description'],
-      lecturerId: map['lecturerId'] ?? '',
-      token: map['token'] ?? '',
-      category: map['category'],
-      active: map['active'] ?? false,
-      thumbnailUrl: map['thumbnailUrl'],
-      expiryDate: map['expiryDate'],
-      createdAt: map['createdAt'] ?? Timestamp.now(),
-      updatedAt: map['updatedAt'] ?? Timestamp.now(),
+      title: map['title']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
+      lecturerId: map['lecturerId']?.toString() ?? '',
+      isPublished: map['isPublished'] as bool? ?? false,
+      createdAt: map['createdAt'] as Timestamp?,
+      thumbnailUrl: map['thumbnailUrl']?.toString(),
+      modules: (map['modules'] as List<dynamic>?)?.cast<Map<String, dynamic>>(),
+      contentUrls: map['contentUrls'] as List<dynamic>? ?? [],
+      enrolledCount: map['enrolledCount'] as int? ?? 0,
+      category: map['category']?.toString(),
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'title': title,
-      'description': description,
-      'lecturerId': lecturerId,
-      'token': token,
-      'category': category,
-      'active': active,
-      'thumbnailUrl': thumbnailUrl,
-      'expiryDate': expiryDate,
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
-    };
   }
 }

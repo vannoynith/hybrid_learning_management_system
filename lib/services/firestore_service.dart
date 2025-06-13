@@ -3,8 +3,11 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:hybridlms/models/course.dart';
+import 'package:uuid/uuid.dart';
 import '../models/user.dart' as firebase_user;
 import '../models/interaction.dart';
+import 'package:file_picker/file_picker.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -49,6 +52,7 @@ class FirestoreService {
     String? userSex,
     String? dateOfBirth,
     bool active = true,
+    DateTime? passwordUpdatedAt,
   }) async {
     try {
       if (uid.isEmpty) throw Exception('UID cannot be empty');
@@ -281,16 +285,19 @@ class FirestoreService {
     }
   }
 
-  /// Uploads a file to Cloudinary for profile pictures and returns the secure URL.
+  /// Uploads a file to Cloudinary and returns the secure URL.
   Future<String> uploadToCloudinary(
     dynamic file, // String for mobile, Uint8List for web
     String type,
     String userId, {
     bool isProfilePic = false,
+    bool isThumbnail = false,
+    String? courseId,
+    String? moduleId,
   }) async {
     try {
       if (file == null) throw Exception('File cannot be null');
-      if (!['image'].contains(type)) {
+      if (!['image', 'pdf', 'video', 'doc'].contains(type)) {
         throw Exception('Invalid content type: $type');
       }
       if (userId.isEmpty) throw Exception('User ID cannot be empty');
@@ -303,15 +310,19 @@ class FirestoreService {
         throw Exception('File must be bytes on web');
       }
 
-      // Validate file size
+      // Validate file path on non-web platforms
       if (!kIsWeb && file is String) {
-        final fileSize = await File(file).length();
-        if (fileSize > 10 * 1024 * 1024) {
-          throw Exception('File size exceeds 10MB limit');
+        final filePath = file as String;
+        if (filePath.isEmpty || !await File(filePath).exists()) {
+          throw Exception('File path not found: $filePath');
+        }
+        final fileSize = await File(filePath).length();
+        if (fileSize > 100 * 1024 * 1024) {
+          throw Exception('File size exceeds 100MB limit');
         }
       } else if (kIsWeb && file is Uint8List) {
-        if (file.length > 10 * 1024 * 1024) {
-          throw Exception('File size exceeds 10MB limit');
+        if (file.length > 100 * 1024 * 1024) {
+          throw Exception('File size exceeds 100MB limit');
         }
       }
 
@@ -319,8 +330,12 @@ class FirestoreService {
       String folderPath = 'hybridlms';
       if (isProfilePic) {
         folderPath += '/users/$userId/profile';
+      } else if (isThumbnail) {
+        folderPath += '/courses/$courseId/thumbnail';
+      } else if (courseId != null && moduleId != null) {
+        folderPath += '/courses/$courseId/$moduleId/$type';
       } else {
-        folderPath += '/users/$userId/uploads';
+        folderPath += '/users/$userId/uploads/$type';
       }
 
       // Generate unique public ID
@@ -333,7 +348,12 @@ class FirestoreService {
             file,
             folder: folderPath,
             publicId: publicId,
-            resourceType: CloudinaryResourceType.Image,
+            resourceType:
+                type == 'image'
+                    ? CloudinaryResourceType.Image
+                    : type == 'video'
+                    ? CloudinaryResourceType.Video
+                    : CloudinaryResourceType.Raw,
           ),
         );
       } else if (kIsWeb && file is Uint8List) {
@@ -342,8 +362,13 @@ class FirestoreService {
             file,
             folder: folderPath,
             publicId: publicId,
-            resourceType: CloudinaryResourceType.Image,
-            identifier: publicId, // Added meaningful identifier
+            resourceType:
+                type == 'image'
+                    ? CloudinaryResourceType.Image
+                    : type == 'video'
+                    ? CloudinaryResourceType.Video
+                    : CloudinaryResourceType.Raw,
+            identifier: publicId,
           ),
         );
       } else {
@@ -357,8 +382,13 @@ class FirestoreService {
       // Log the interaction
       final interaction = Interaction(
         userId: userId,
-        action: isProfilePic ? 'upload_profile_picture' : 'upload_file',
-        targetId: userId,
+        action:
+            isProfilePic
+                ? 'upload_profile_picture'
+                : isThumbnail
+                ? 'upload_thumbnail'
+                : 'upload_$type',
+        targetId: isProfilePic ? userId : courseId ?? userId,
         details: 'Uploaded $type to $folderPath/$publicId',
         timestamp: Timestamp.now(),
       );
@@ -380,7 +410,8 @@ class FirestoreService {
       if (userId.isEmpty) throw Exception('User ID cannot be empty');
       if (adminUid.isEmpty) throw Exception('Admin UID cannot be empty');
       final adminDoc = await _db.collection('users').doc(adminUid).get();
-      if (!adminDoc.exists || adminDoc.get('role') != 'admin') {
+      if (userId != adminUid &&
+          (!adminDoc.exists || adminDoc.get('role') != 'admin')) {
         throw Exception('Invalid or non-admin user: $adminUid');
       }
       final userDoc = await _db.collection('users').doc(userId).get();
@@ -507,6 +538,451 @@ class FirestoreService {
       await initializeInteractionsCollection();
     } catch (e) {
       throw Exception('Failed to initialize collections: $e');
+    }
+  }
+
+  /// Creates or updates a course in Firestore with modules and lesson content.
+  Future<void> saveCourse(String lecturerId, Course course) async {
+    try {
+      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+      if (course.title.isEmpty) throw Exception('Course title cannot be empty');
+      if (course.category != null && course.category!.isEmpty) {
+        throw Exception('Course category cannot be empty if provided');
+      }
+
+      await _db.runTransaction((transaction) async {
+        final courseData = course.toMap();
+        courseData['lastModifiedAt'] = FieldValue.serverTimestamp();
+        transaction.set(
+          _db.collection('courses').doc(course.id),
+          courseData,
+          SetOptions(merge: true),
+        );
+        final previousCourseDoc = await transaction.get(
+          _db.collection('courses').doc(course.id),
+        );
+        final previousCategory = previousCourseDoc.data()?['category'];
+        final interaction = Interaction(
+          userId: lecturerId,
+          action: course.createdAt == null ? 'create_course' : 'update_course',
+          targetId: course.id,
+          details:
+              '${course.createdAt == null ? 'Created' : 'Updated'} course: ${course.title}' +
+              (previousCategory != course.category
+                  ? ' (Category changed from $previousCategory to ${course.category})'
+                  : ''),
+          timestamp: Timestamp.now(),
+        );
+        transaction.set(
+          _db.collection('interactions').doc(),
+          interaction.toMap(),
+        );
+      });
+    } catch (e) {
+      throw Exception('Failed to save course: $e');
+    }
+  }
+
+  /// Saves modules and lessons as subcollections in Firestore.
+  Future<void> saveCourseSubcollections(
+    String courseId,
+    List<Map<String, dynamic>> modules,
+  ) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      await _db.runTransaction((transaction) async {
+        // Perform all reads at the beginning
+        final existingModulesSnapshot =
+            await _db
+                .collection('courses')
+                .doc(courseId)
+                .collection('modules')
+                .get();
+        final existingModuleIds =
+            existingModulesSnapshot.docs.map((doc) => doc.id).toSet();
+
+        // Map to store existing lessons for each module
+        final existingLessonsMap = <String, Set<String>>{};
+        for (var moduleDoc in existingModulesSnapshot.docs) {
+          final moduleId = moduleDoc.id;
+          final lessonsSnapshot =
+              await _db
+                  .collection('courses')
+                  .doc(courseId)
+                  .collection('modules')
+                  .doc(moduleId)
+                  .collection('lessons')
+                  .get();
+          existingLessonsMap[moduleId] =
+              lessonsSnapshot.docs.map((doc) => doc.id).toSet();
+        }
+
+        final newModuleIds =
+            modules.map((module) => module['id'] as String).toSet();
+
+        // Perform all writes after reads
+        // Delete modules that are no longer present
+        for (var moduleId in existingModuleIds.difference(newModuleIds)) {
+          transaction.delete(
+            _db
+                .collection('courses')
+                .doc(courseId)
+                .collection('modules')
+                .doc(moduleId),
+          );
+        }
+
+        for (var module in modules) {
+          final moduleId = module['id'] ?? const Uuid().v4();
+          transaction.set(
+            _db
+                .collection('courses')
+                .doc(courseId)
+                .collection('modules')
+                .doc(moduleId),
+            {
+              'id': moduleId,
+              'name': module['name'] ?? '',
+              'createdAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+
+          final existingLessonIds = existingLessonsMap[moduleId] ?? {};
+          final newLessonIds =
+              (module['lessons'] as List<dynamic>?)
+                  ?.map((lesson) => lesson['id'] as String)
+                  .toSet() ??
+              {};
+
+          // Delete lessons that are no longer present
+          for (var lessonId in existingLessonIds.difference(newLessonIds)) {
+            transaction.delete(
+              _db
+                  .collection('courses')
+                  .doc(courseId)
+                  .collection('modules')
+                  .doc(moduleId)
+                  .collection('lessons')
+                  .doc(lessonId),
+            );
+          }
+
+          for (var lesson in module['lessons'] ?? []) {
+            final lessonId = lesson['id'] ?? const Uuid().v4();
+            transaction.set(
+              _db
+                  .collection('courses')
+                  .doc(courseId)
+                  .collection('modules')
+                  .doc(moduleId)
+                  .collection('lessons')
+                  .doc(lessonId),
+              {
+                'id': lessonId,
+                'name': lesson['name'] ?? '',
+                'text': lesson['text'] ?? '',
+                'documents': lesson['documents'] ?? [],
+                'videos': lesson['videos'] ?? [],
+                'images': lesson['images'] ?? [],
+                'createdAt': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
+          }
+        }
+      });
+    } catch (e) {
+      throw Exception('Failed to save course subcollections: $e');
+    }
+  }
+
+  /// Publishes a course by setting its published status to true.
+  Future<void> publishCourse(String courseId, String lecturerId) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+      final courseData = courseDoc.data();
+      if (courseData == null) throw Exception('Course data is null');
+      if (courseData['lecturerId'] != lecturerId) {
+        throw Exception('Unauthorized: Not the course lecturer');
+      }
+
+      await _db.runTransaction((transaction) async {
+        transaction.update(_db.collection('courses').doc(courseId), {
+          'isPublished': true,
+          'publishedAt': FieldValue.serverTimestamp(),
+        });
+        final interaction = Interaction(
+          userId: lecturerId,
+          action: 'publish_course',
+          targetId: courseId,
+          details: 'Published course: ${courseData['title'] ?? courseId}',
+          timestamp: Timestamp.now(),
+        );
+        transaction.set(
+          _db.collection('interactions').doc(),
+          interaction.toMap(),
+        );
+      });
+    } catch (e) {
+      throw Exception('Failed to publish course: $e');
+    }
+  }
+
+  /// Disables a course by setting its published status to false.
+  Future<void> disableCourse(String courseId, String lecturerId) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+      final courseData = courseDoc.data();
+      if (courseData == null) throw Exception('Course data is null');
+      if (courseData['lecturerId'] != lecturerId) {
+        throw Exception('Unauthorized: Not the course lecturer');
+      }
+
+      await _db.runTransaction((transaction) async {
+        transaction.update(_db.collection('courses').doc(courseId), {
+          'isPublished': false,
+        });
+        final interaction = Interaction(
+          userId: lecturerId,
+          action: 'disable_course',
+          targetId: courseId,
+          details: 'Disabled course: ${courseData['title'] ?? courseId}',
+          timestamp: Timestamp.now(),
+        );
+        transaction.set(
+          _db.collection('interactions').doc(),
+          interaction.toMap(),
+        );
+      });
+    } catch (e) {
+      throw Exception('Failed to disable course: $e');
+    }
+  }
+
+  /// Deletes a course and logs the interaction.
+  Future<void> deleteCourse(String courseId, String lecturerId) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+      final courseData = courseDoc.data();
+      if (courseData == null) throw Exception('Course data is null');
+      if (courseData['lecturerId'] != lecturerId) {
+        throw Exception('Unauthorized: Not the course lecturer');
+      }
+
+      await _db.runTransaction((transaction) async {
+        transaction.delete(_db.collection('courses').doc(courseId));
+        final interaction = Interaction(
+          userId: lecturerId,
+          action: 'delete_course',
+          targetId: courseId,
+          details: 'Deleted course: ${courseData['title'] ?? courseId}',
+          timestamp: Timestamp.now(),
+        );
+        transaction.set(
+          _db.collection('interactions').doc(),
+          interaction.toMap(),
+        );
+      });
+    } catch (e) {
+      throw Exception('Failed to delete course: $e');
+    }
+  }
+
+  /// Retrieves a course by ID with modules and lessons.
+  Future<Course?> getCourse(String courseId) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      final doc = await _db.collection('courses').doc(courseId).get();
+      final data = doc.data();
+      if (data == null) return null;
+
+      final courseData = data as Map<String, dynamic>;
+
+      // Fetch modules and lessons from subcollections
+      final modulesSnapshot =
+          await _db
+              .collection('courses')
+              .doc(courseId)
+              .collection('modules')
+              .get();
+      final modules = <Map<String, dynamic>>[];
+      for (var moduleDoc in modulesSnapshot.docs) {
+        final moduleData = moduleDoc.data() as Map<String, dynamic>;
+        final lessonsSnapshot =
+            await _db
+                .collection('courses')
+                .doc(courseId)
+                .collection('modules')
+                .doc(moduleData['id'])
+                .collection('lessons')
+                .get();
+        final lessons =
+            lessonsSnapshot.docs.map((lessonDoc) {
+              final lessonData = lessonDoc.data() as Map<String, dynamic>;
+              return {
+                'id': lessonData['id'] ?? const Uuid().v4(),
+                'name': lessonData['name'] ?? '',
+                'text': lessonData['text'] ?? '',
+                'documents': lessonData['documents'] ?? [],
+                'videos': lessonData['videos'] ?? [],
+                'images': lessonData['images'] ?? [],
+                'createdAt':
+                    lessonData['createdAt'] ?? FieldValue.serverTimestamp(),
+              };
+            }).toList();
+        modules.add({
+          'id': moduleData['id'],
+          'name': moduleData['name'],
+          'lessons': lessons,
+          'createdAt': moduleData['createdAt'] ?? FieldValue.serverTimestamp(),
+        });
+      }
+      courseData['modules'] = modules.isEmpty ? null : modules;
+
+      return Course.fromMap(courseData, doc.id);
+    } catch (e) {
+      throw Exception('Failed to get course: $e');
+    }
+  }
+
+  /// Retrieves all courses for a lecturer with optional category filter.
+  Future<List<Course>> getLecturerCourses(
+    String lecturerId, {
+    String? category,
+  }) async {
+    try {
+      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+      Query query = _db
+          .collection('courses')
+          .where('lecturerId', isEqualTo: lecturerId)
+          .orderBy('createdAt', descending: true);
+      if (category != null && category.isNotEmpty) {
+        query = query.where('category', isEqualTo: category);
+      }
+      final querySnapshot = await query.get();
+      final courses = <Course>[];
+      for (var doc in querySnapshot.docs) {
+        final data = doc.data();
+        if (data == null) continue;
+        final courseData = data as Map<String, dynamic>;
+
+        final modulesSnapshot =
+            await _db
+                .collection('courses')
+                .doc(doc.id)
+                .collection('modules')
+                .get();
+        final modules = <Map<String, dynamic>>[];
+        for (var moduleDoc in modulesSnapshot.docs) {
+          final moduleData = moduleDoc.data() as Map<String, dynamic>;
+          final lessonsSnapshot =
+              await _db
+                  .collection('courses')
+                  .doc(doc.id)
+                  .collection('modules')
+                  .doc(moduleData['id'])
+                  .collection('lessons')
+                  .get();
+          final lessons =
+              lessonsSnapshot.docs.map((lessonDoc) {
+                final lessonData = lessonDoc.data() as Map<String, dynamic>;
+                return {
+                  'id': lessonData['id'] ?? const Uuid().v4(),
+                  'name': lessonData['name'] ?? '',
+                  'text': lessonData['text'] ?? '',
+                  'documents': lessonData['documents'] ?? [],
+                  'videos': lessonData['videos'] ?? [],
+                  'images': lessonData['images'] ?? [],
+                  'createdAt':
+                      lessonData['createdAt'] ?? FieldValue.serverTimestamp(),
+                };
+              }).toList();
+          modules.add({
+            'id': moduleData['id'],
+            'name': moduleData['name'],
+            'lessons': lessons,
+            'createdAt':
+                moduleData['createdAt'] ?? FieldValue.serverTimestamp(),
+          });
+        }
+        courseData['modules'] = modules.isEmpty ? null : modules;
+        courses.add(Course.fromMap(courseData, doc.id));
+      }
+      return courses;
+    } catch (e) {
+      throw Exception('Failed to get lecturer courses: $e');
+    }
+  }
+
+  /// Enrolls a student in a course.
+  Future<void> enrollStudent(String courseId, String studentId) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (studentId.isEmpty) throw Exception('Student ID cannot be empty');
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+      final userDoc = await _db.collection('users').doc(studentId).get();
+      if (!userDoc.exists || userDoc.get('role') != 'student') {
+        throw Exception('Invalid or non-student user: $studentId');
+      }
+
+      await _db.runTransaction((transaction) async {
+        final enrollmentRef = _db
+            .collection('enrollments')
+            .doc('$courseId-$studentId');
+        transaction.set(enrollmentRef, {
+          'courseId': courseId,
+          'studentId': studentId,
+          'enrolledAt': FieldValue.serverTimestamp(),
+        });
+        final interaction = Interaction(
+          userId: studentId,
+          action: 'enroll_course',
+          targetId: courseId,
+          details: 'Student enrolled in course: $courseId',
+          timestamp: Timestamp.now(),
+        );
+        transaction.set(
+          _db.collection('interactions').doc(),
+          interaction.toMap(),
+        );
+      });
+    } catch (e) {
+      throw Exception('Failed to enroll student: $e');
+    }
+  }
+
+  /// Retrieves enrolled students for a course.
+  Future<List<Map<String, dynamic>>> getEnrolledStudents(
+    String courseId,
+  ) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      final querySnapshot =
+          await _db
+              .collection('enrollments')
+              .where('courseId', isEqualTo: courseId)
+              .get();
+      final studentIds =
+          querySnapshot.docs.map((doc) => doc['studentId'] as String).toList();
+      final students = <Map<String, dynamic>>[];
+      for (var studentId in studentIds) {
+        final user = await getUser(studentId);
+        if (user != null) students.add(user);
+      }
+      return students;
+    } catch (e) {
+      throw Exception('Failed to get enrolled students: $e');
     }
   }
 }

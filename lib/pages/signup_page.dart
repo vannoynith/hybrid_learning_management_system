@@ -159,7 +159,13 @@ class _SignUpPageState extends State<SignupPage> {
                   SizedBox(height: constraints.maxHeight * 0.04),
                   isLoading
                       ? const LoadingIndicator()
-                      : CustomButton(text: 'Sign Up', onPressed: _signUp),
+                      : Center(
+                        child: CustomButton(
+                          text: 'Sign Up',
+                          onPressed: _signUp,
+                          // width: constraints.maxWidth * 0.6,
+                        ),
+                      ),
                   SizedBox(height: constraints.maxHeight * 0.02),
                   Center(
                     child: TextButton(

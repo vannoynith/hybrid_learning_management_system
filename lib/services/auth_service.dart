@@ -70,9 +70,10 @@ class AuthService {
     String role, {
     required String username,
   }) async {
+    FirebaseApp? secondaryApp;
     try {
       // Initialize a secondary Firebase app to avoid affecting the current session
-      final secondaryApp = await Firebase.initializeApp(
+      secondaryApp = await Firebase.initializeApp(
         name: 'SecondaryApp_${DateTime.now().millisecondsSinceEpoch}',
         options: Firebase.app().options,
       );
@@ -98,14 +99,21 @@ class AuthService {
           'lastActive': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
-        // Sign out from secondary app and delete it
+        // Sign out from secondary app
         await secondaryAuth.signOut();
-        await secondaryApp.delete();
       }
-
       return user;
     } catch (e) {
       throw Exception('Create user failed: ${e.toString()}');
+    } finally {
+      // Ensure secondary app is deleted even if an error occurs
+      if (secondaryApp != null) {
+        try {
+          await secondaryApp.delete();
+        } catch (e) {
+          print('Failed to delete secondary app: $e');
+        }
+      }
     }
   }
 
@@ -135,7 +143,11 @@ class AuthService {
   }
 
   User? getCurrentUser() {
-    return _auth.currentUser;
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('No authenticated user found. Please sign in.');
+    }
+    return user;
   }
 
   Future<String?> getUserRole(String uid) async {

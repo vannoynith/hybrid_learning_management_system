@@ -156,7 +156,13 @@ class _LoginPageState extends State<LoginPage> {
                   SizedBox(height: constraints.maxHeight * 0.04),
                   isLoading
                       ? const LoadingIndicator()
-                      : CustomButton(text: 'Login', onPressed: _signIn),
+                      : Center(
+                        child: CustomButton(
+                          text: 'Login',
+                          onPressed: _signIn,
+                          //width: constraints.maxWidth * 0.6,
+                        ),
+                      ),
                   SizedBox(height: constraints.maxHeight * 0.02),
                   Center(
                     child: TextButton(

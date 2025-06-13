@@ -1,29 +1,24 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/animation.dart';
-import 'package:hybridlms/models/course.dart';
-//import 'package:hybridlms/pages/lecturer/create_course_page.dart';
+import 'package:hybridlms/pages/lecturer/change_password_for_lecturer_page.dart';
+import 'package:hybridlms/pages/lecturer/content_viewer_page.dart';
+import 'package:hybridlms/pages/lecturer/course_editor.dart';
+import 'package:hybridlms/pages/lecturer/course_management_page.dart';
+import 'package:hybridlms/pages/lecturer/lecturer_dashboard.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_settings_page.dart';
-//import 'package:hybridlms/pages/lecturer/manage_course_page.dart';
-import 'routes.dart';
-import 'pages/signup_page.dart';
-import 'theme.dart';
-import 'pages/login_page.dart';
-//import 'pages/student/dashboard_page.dart';
-//import 'pages/student/profile_page.dart';
-//import 'pages/timeline_page.dart';
-import 'pages/student/analytics_page.dart';
-import 'pages/student/assignment_page.dart';
-import 'pages/chat_page.dart';
-//import 'pages/notification_page.dart';
-//import 'pages/student/quiz_page.dart';
-//import 'pages/student/lecturers_page.dart';
-import 'pages/admin/admin_dashboard_page.dart';
-//import 'pages/lecturer/lecturer_dashboard_page.dart';
-//import 'pages/student/profile_edit_page.dart';
-import 'pages/admin/create_admin_page.dart';
-import 'pages/admin/create_lecturer_page.dart';
-import 'pages/admin/user_management_page.dart';
+import 'package:hybridlms/pages/student/lecturers_page.dart';
+import 'package:hybridlms/routes.dart';
+import 'package:hybridlms/theme.dart';
+import 'package:hybridlms/pages/signup_page.dart';
+import 'package:hybridlms/pages/login_page.dart';
+import 'package:hybridlms/pages/student/analytics_page.dart';
+import 'package:hybridlms/pages/student/assignment_page.dart';
+import 'package:hybridlms/pages/chat_page.dart';
+import 'package:hybridlms/pages/admin/admin_dashboard_page.dart';
+import 'package:hybridlms/services/auth_service.dart';
+import 'package:hybridlms/services/firestore_service.dart';
+import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,71 +31,46 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AI HLMS',
-      theme: appTheme(),
-      initialRoute: Routes.login,
-      routes: {
-        Routes.login: (context) => const FadeTransitionPage(child: LoginPage()),
-        Routes.signup:
-            (context) => const FadeTransitionPage(child: SignupPage()),
-        // Routes.dashboard:
-        //     (context) => const FadeTransitionPage(child: DashboardPage()),
-        // Routes.courseList:
-        //     (context) => const FadeTransitionPage(child: CourseListPage()),
-        // Routes.courseDetail: (context) {
-        //   final args =
-        //       ModalRoute.of(context)?.settings.arguments
-        //           as Map<String, dynamic>?;
-        //   final courseId = args?['courseId'] as String? ?? '';
-        //   return FadeTransitionPage(
-        //     child: CourseDetailPage(courseId: courseId),
-        //   );
-        // },
-        // Routes.profile:
-        //     (context) => const FadeTransitionPage(child: ProfilePage()),
-        // // Routes.timeline: (context) =>
-        // //const FadeTransitionPage(child: TimelinePage()),
-        Routes.analytics:
-            (context) => const FadeTransitionPage(child: AnalyticsPage()),
-        Routes.assignment:
-            (context) => const FadeTransitionPage(child: AssignmentPage()),
-        Routes.chat: (context) => const FadeTransitionPage(child: ChatPage()),
-        // Routes.lecture:
-        //     (context) => const FadeTransitionPage(child: LecturePage()),
-        // Routes.lecturers:
-        //     (context) => const FadeTransitionPage(child: LecturersPage()),
-        // Routes.notification:
-        //     (context) => const FadeTransitionPage(child: NotificationPage()),
-        // Routes.quiz: (context) => const FadeTransitionPage(child: QuizPage()),
-        // Routes.profileEdit:
-        //     (context) => const FadeTransitionPage(child: ProfileEditPage()),
-        Routes.adminDashboard:
-            (context) => const FadeTransitionPage(child: AdminDashboardPage()),
-        //   Routes.lecturerDashboard:
-        //       (context) =>
-        //           const FadeTransitionPage(child: LecturerDashboardPage()),
-        //   Routes.createAdmin:
-        //       (context) => const FadeTransitionPage(child: CreateAdminPage()),
-        //   Routes.createLecturer:
-        //       (context) => const FadeTransitionPage(child: CreateLecturerPage()),
-        //   Routes.userManagement:
-        //       (context) => const FadeTransitionPage(child: UserManagementPage()),
-        //   Routes.createCourse:
-        //       (context) => const FadeTransitionPage(child: CreateCoursePage()),
-        //   Routes.manageCourse: (context) {
-        //     final args = ModalRoute.of(context)?.settings.arguments as Course?;
-        //     if (args == null) {
-        //       return const FadeTransitionPage(
-        //         child: Scaffold(body: Center(child: Text('No course provided'))),
-        //       );
-        //     }
-        //     return FadeTransitionPage(child: ManageCoursePage(course: args));
-        //   },
-        //   Routes.lecturerSettings:
-        //       (context) =>
-        //           const FadeTransitionPage(child: LecturerSettingsPage()),
-      },
+    return MultiProvider(
+      providers: [
+        Provider<AuthService>(create: (_) => AuthService()),
+        Provider<FirestoreService>(create: (_) => FirestoreService()),
+      ],
+      child: MaterialApp(
+        title: 'AI HLMS',
+        theme: appTheme(),
+        initialRoute: Routes.login,
+        routes: {
+          Routes.login:
+              (context) => const FadeTransitionPage(child: LoginPage()),
+          Routes.signup:
+              (context) => const FadeTransitionPage(child: SignupPage()),
+          Routes.analytics:
+              (context) => const FadeTransitionPage(child: AnalyticsPage()),
+          Routes.assignment:
+              (context) => const FadeTransitionPage(child: AssignmentPage()),
+          Routes.chat: (context) => const FadeTransitionPage(child: ChatPage()),
+          Routes.adminDashboard:
+              (context) =>
+                  const FadeTransitionPage(child: AdminDashboardPage()),
+          Routes.lecturerDashboard:
+              (context) => const FadeTransitionPage(child: LecturerDashboard()),
+          Routes.courseManagement:
+              (context) =>
+                  const FadeTransitionPage(child: CourseManagementPage()),
+          Routes.contentViewPage:
+              (context) => const FadeTransitionPage(child: ContentViewerPage()),
+          Routes.courseEditor:
+              (context) => const FadeTransitionPage(child: CourseEditor()),
+          Routes.lecturerSettingsPage:
+              (context) =>
+                  const FadeTransitionPage(child: LecturerSettingsPage()),
+          Routes.changePasswordForLecturer:
+              (context) => const FadeTransitionPage(
+                child: ChangePasswordForLecturerPage(),
+              ),
+        },
+      ),
     );
   }
 }
@@ -131,6 +101,15 @@ class _FadeTransitionPageState extends State<FadeTransitionPage>
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant FadeTransitionPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.child != oldWidget.child) {
+      _controller.reset();
+      _controller.forward();
+    }
   }
 
   @override
