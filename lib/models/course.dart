@@ -36,6 +36,7 @@ class Course {
       'isPublished': isPublished,
       'createdAt': createdAt ?? FieldValue.serverTimestamp(),
       'thumbnailUrl': thumbnailUrl,
+      'modules': modules, // Added modules to the map
       'contentUrls': contentUrls,
       'enrolledCount': enrolledCount,
       'category': category,

@@ -6,7 +6,7 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:hybridlms/models/course.dart';
 import 'package:hybridlms/models/interaction.dart';
 import 'package:uuid/uuid.dart';
-import '../models/user.dart' as firebase_user;
+
 import 'package:file_picker/file_picker.dart';
 
 class FirestoreService {
@@ -1033,16 +1033,10 @@ class FirestoreService {
       }
       final previousCategory = courseData['category'] as String?;
       final previousPublished = courseData['isPublished'] as bool?;
-      final previousThumbnailUrl = courseData['thumbnailUrl'] as String?;
 
       await _db.runTransaction((transaction) async {
-        // Update course data
         final courseDataToUpdate = course.toMap();
         courseDataToUpdate['lastModifiedAt'] = FieldValue.serverTimestamp();
-        if (course.thumbnailUrl != null &&
-            course.thumbnailUrl != previousThumbnailUrl) {
-          courseDataToUpdate['thumbnailUrl'] = course.thumbnailUrl;
-        }
         transaction.update(
           _db.collection('courses').doc(course.id),
           courseDataToUpdate,
@@ -1056,10 +1050,9 @@ class FirestoreService {
           });
         }
 
-        // Save or update subcollections with uploaded files
+        // Save or update subcollections
         await saveCourseSubcollections(course.id, course.modules ?? []);
 
-        // Log the interaction
         final interaction = Interaction(
           userId: lecturerId,
           action: 'update_course',
@@ -1071,9 +1064,6 @@ class FirestoreService {
                   : '') +
               (course.isPublished != previousPublished
                   ? ' (Publish status changed to ${course.isPublished ? 'Published' : 'Draft'})'
-                  : '') +
-              (course.thumbnailUrl != previousThumbnailUrl
-                  ? ' (Thumbnail updated)'
                   : ''),
           timestamp: Timestamp.now(),
         );

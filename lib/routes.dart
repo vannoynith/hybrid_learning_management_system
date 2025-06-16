@@ -22,6 +22,7 @@ class Routes {
   static const String lecturerSettingsPage = '/lecturer_settings';
   static const String courseEditor = '/course_editor';
   static const String courseManagement = '/course_management';
+  static const String updateCourse = '/update_course_page';
   static const String contentViewPage = '/content_viewer_page';
   static const String changePasswordForLecturer =
       '/change_password_for_lecturer_page';

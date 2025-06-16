@@ -7,6 +7,7 @@ import 'package:hybridlms/pages/lecturer/course_editor.dart';
 import 'package:hybridlms/pages/lecturer/course_management_page.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_dashboard.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_settings_page.dart';
+import 'package:hybridlms/pages/lecturer/update_course_page.dart';
 import 'package:hybridlms/pages/student/lecturers_page.dart';
 import 'package:hybridlms/routes.dart';
 import 'package:hybridlms/theme.dart';
@@ -62,6 +63,9 @@ class MyApp extends StatelessWidget {
               (context) => const FadeTransitionPage(child: ContentViewerPage()),
           Routes.courseEditor:
               (context) => const FadeTransitionPage(child: CourseEditor()),
+          Routes.updateCourse:
+              (context) =>
+                  FadeTransitionPage(child: UpdateCoursePage(courseId: '')),
           Routes.lecturerSettingsPage:
               (context) =>
                   const FadeTransitionPage(child: LecturerSettingsPage()),

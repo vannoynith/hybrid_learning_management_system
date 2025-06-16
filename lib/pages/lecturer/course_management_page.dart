@@ -516,7 +516,7 @@ class _CourseManagementPageState extends State<CourseManagementPage> {
                                                       : () =>
                                                           Navigator.pushNamed(
                                                             context,
-                                                            Routes.courseEditor,
+                                                            Routes.updateCourse,
                                                             arguments: course,
                                                           ),
                                             ),

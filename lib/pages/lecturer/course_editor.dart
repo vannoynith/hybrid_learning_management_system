@@ -20,7 +20,7 @@ class CourseEditor extends StatefulWidget {
 }
 
 class _CourseEditorState extends State<CourseEditor>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
@@ -30,7 +30,9 @@ class _CourseEditorState extends State<CourseEditor>
   PlatformFile? _selectedThumbnail;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  String? _selectedCategory; // New field for category
+  late AnimationController _snackbarAnimationController;
+  late Animation<double> _snackbarFadeAnimation;
+  String? _selectedCategory;
 
   // Define course categories
   static const List<String> courseCategories = [
@@ -57,9 +59,7 @@ class _CourseEditorState extends State<CourseEditor>
     _titleController.text = widget.course?.title ?? '';
     _descriptionController.text = widget.course?.description ?? '';
     _isPublished = widget.course?.isPublished ?? false;
-    _selectedCategory =
-        widget.course?.category ??
-        courseCategories[0]; // Default to first category if none
+    _selectedCategory = widget.course?.category ?? courseCategories[0];
     if (widget.course != null) {
       _modules =
           widget.course!.modules
@@ -94,6 +94,14 @@ class _CourseEditorState extends State<CourseEditor>
       begin: 0,
       end: 1,
     ).animate(_animationController);
+    _snackbarAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _snackbarFadeAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(_snackbarAnimationController);
   }
 
   @override
@@ -101,6 +109,7 @@ class _CourseEditorState extends State<CourseEditor>
     _titleController.dispose();
     _descriptionController.dispose();
     _animationController.dispose();
+    _snackbarAnimationController.dispose();
     super.dispose();
   }
 
@@ -367,7 +376,6 @@ class _CourseEditorState extends State<CourseEditor>
           final videos = <String>[];
           final images = <String>[];
 
-          // Handle documents
           for (var file in (lesson['documents'] as List<dynamic>?) ?? []) {
             if (file is PlatformFile) {
               final url = await _uploadFile(
@@ -383,7 +391,6 @@ class _CourseEditorState extends State<CourseEditor>
             }
           }
 
-          // Handle videos
           for (var file in (lesson['videos'] as List<dynamic>?) ?? []) {
             if (file is PlatformFile) {
               final url = await _uploadFile(
@@ -399,7 +406,6 @@ class _CourseEditorState extends State<CourseEditor>
             }
           }
 
-          // Handle images
           for (var file in (lesson['images'] as List<dynamic>?) ?? []) {
             if (file is PlatformFile) {
               final url = await _uploadFile(
@@ -454,7 +460,7 @@ class _CourseEditorState extends State<CourseEditor>
                 )
                 .toList(),
         enrolledCount: widget.course?.enrolledCount ?? 0,
-        category: _selectedCategory, // Add category to Course
+        category: _selectedCategory,
       );
 
       await firestoreService.saveCourse(user.uid, course);
@@ -471,6 +477,7 @@ class _CourseEditorState extends State<CourseEditor>
       );
 
       if (mounted) {
+        _snackbarAnimationController.forward();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -492,10 +499,7 @@ class _CourseEditorState extends State<CourseEditor>
             ),
             duration: const Duration(seconds: 3),
             animation: CurvedAnimation(
-              parent: AnimationController(
-                duration: const Duration(milliseconds: 300),
-                vsync: this,
-              )..forward(),
+              parent: _snackbarAnimationController,
               curve: Curves.easeInOut,
             ),
           ),
@@ -504,6 +508,7 @@ class _CourseEditorState extends State<CourseEditor>
       }
     } catch (e) {
       if (mounted) {
+        _snackbarAnimationController.forward();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -524,6 +529,10 @@ class _CourseEditorState extends State<CourseEditor>
               borderRadius: BorderRadius.circular(12),
             ),
             duration: const Duration(seconds: 3),
+            animation: CurvedAnimation(
+              parent: _snackbarAnimationController,
+              curve: Curves.easeInOut,
+            ),
           ),
         );
       }
@@ -1024,7 +1033,6 @@ class _CourseEditorState extends State<CourseEditor>
                                       'Enter course title (e.g., Learn Flutter)',
                                 ),
                                 const SizedBox(height: 16),
-                                // Add Dropdown for Category
                                 DropdownButtonFormField<String>(
                                   value: _selectedCategory,
                                   decoration: InputDecoration(
