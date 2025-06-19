@@ -17,7 +17,7 @@ class Routes {
   static const String adminDashboard = '/admin-dashboard';
   static const String lecturerDashboard = '/lecturer_dashboard';
   static const String createAdmin = '/create_admin';
-  static const String createLecturer = '/create_lecturer';
+  static const String createLecturer = '/create_lecturer_page';
   static const String userManagement = '/user_management';
   static const String lecturerSettingsPage = '/lecturer_settings';
   static const String courseEditor = '/course_editor';

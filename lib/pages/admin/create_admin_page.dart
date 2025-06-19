@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
-import '../../widgets/loading_indicator.dart';
+import '../../widgets/loading_indicator.dart'; // Updated to use your custom LoadingIndicator
 import '../../widgets/custom_button.dart';
 import '../../models/interaction.dart';
 
@@ -237,165 +238,6 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Admin'),
-        backgroundColor: Theme.of(context).primaryColor,
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: constraints.maxWidth * 0.06,
-                vertical: constraints.maxHeight * 0.03,
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Create New Admin',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineLarge?.copyWith(
-                        color: Theme.of(context).primaryColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: constraints.maxHeight * 0.01),
-                    Text(
-                      'Fill in the details to create an admin account',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                    SizedBox(height: constraints.maxHeight * 0.04),
-                    _buildTextField(
-                      controller: _nameController,
-                      label: 'Full Name',
-                      icon: Icons.person,
-                    ),
-                    SizedBox(height: constraints.maxHeight * 0.02),
-                    _buildTextField(
-                      controller: _emailController,
-                      label: 'Email Address',
-                      icon: Icons.email,
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    SizedBox(height: constraints.maxHeight * 0.02),
-                    _buildTextField(
-                      controller: _phoneController,
-                      label: 'Phone Number',
-                      icon: Icons.phone,
-                      keyboardType: TextInputType.phone,
-                    ),
-                    SizedBox(height: constraints.maxHeight * 0.02),
-                    DropdownButtonFormField<String>(
-                      value: _selectedSex,
-                      decoration: InputDecoration(
-                        labelText: 'Sex',
-                        prefixIcon: const Icon(
-                          Icons.person_outline,
-                          color: Color(0xFF4B5563),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(
-                            color: Theme.of(context).primaryColor,
-                            width: 2,
-                          ),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFEF4444),
-                          ),
-                        ),
-                      ),
-                      items:
-                          _sexOptions
-                              .map(
-                                (sex) => DropdownMenuItem(
-                                  value: sex,
-                                  child: Text(sex),
-                                ),
-                              )
-                              .toList(),
-                      onChanged:
-                          (value) => setState(() => _selectedSex = value),
-                      hint: const Text('Select Sex'),
-                    ),
-                    SizedBox(height: constraints.maxHeight * 0.02),
-                    _buildTextField(
-                      controller: _passwordController,
-                      label: 'Password',
-                      icon: Icons.lock,
-                      obscureText: _obscurePassword,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                          color: const Color(0xFF4B5563),
-                        ),
-                        onPressed:
-                            () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                      ),
-                    ),
-                    SizedBox(height: constraints.maxHeight * 0.02),
-                    _buildTextField(
-                      controller: _adminPasswordController,
-                      label: 'Your Admin Password',
-                      icon: Icons.lock_outline,
-                      obscureText: _obscureAdminPassword,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureAdminPassword
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                          color: const Color(0xFF4B5563),
-                        ),
-                        onPressed:
-                            () => setState(
-                              () =>
-                                  _obscureAdminPassword =
-                                      !_obscureAdminPassword,
-                            ),
-                      ),
-                    ),
-                    SizedBox(height: constraints.maxHeight * 0.04),
-                    _isLoading
-                        ? const LoadingIndicator()
-                        : CustomButton(
-                          text: 'Create Admin',
-                          onPressed: _createAdmin,
-                        ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -404,41 +246,258 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
     bool obscureText = false,
     Widget? suffixIcon,
   }) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return TextFormField(
       controller: controller,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF4B5563)),
+        hintText: 'Enter $label',
+        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
+        prefixIcon: Icon(icon, color: const Color(0xFFFF6949)),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: Colors.grey[50],
+        fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey[200]!),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide(
-            color: Theme.of(context).primaryColor,
-            width: 2,
-          ),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFFFF6949), width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: Color(0xFFEF4444)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.redAccent),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
         ),
-        labelStyle: const TextStyle(color: Color(0xFF4B5563)),
+        labelStyle: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 16),
       ),
       keyboardType: keyboardType,
       obscureText: obscureText,
+      style: GoogleFonts.poppins(fontSize: isMobile ? 14 : 16),
+      validator: (value) => value!.trim().isEmpty ? '$label is required' : null,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      body:
+          _isLoading
+              ? const LoadingIndicator() // Using your custom LoadingIndicator
+              : CustomScrollView(
+                slivers: [
+                  SliverAppBar(
+                    expandedHeight: 200,
+                    floating: false,
+                    pinned: true,
+                    toolbarHeight: 60,
+                    titleSpacing: 0,
+                    flexibleSpace: FlexibleSpaceBar(
+                      centerTitle: true,
+                      title: Text(
+                        'Create Admin',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          fontSize: isMobile ? 18 : 22,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      background: Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFFFF6949), Color(0xFFFF8A65)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFFF6949),
+                    elevation: 0,
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 16 : 24,
+                        vertical: 16,
+                      ),
+                      child: Card(
+                        elevation: 8,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(isMobile ? 16 : 24),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Create New Admin',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                    fontSize: isMobile ? 24 : 28,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Fill in the details to create an admin account',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.grey[600],
+                                    fontSize: isMobile ? 14 : 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                _buildTextField(
+                                  controller: _nameController,
+                                  label: 'Full Name',
+                                  icon: Icons.person,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _emailController,
+                                  label: 'Email Address',
+                                  icon: Icons.email,
+                                  keyboardType: TextInputType.emailAddress,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _phoneController,
+                                  label: 'Phone Number',
+                                  icon: Icons.phone,
+                                  keyboardType: TextInputType.phone,
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<String>(
+                                  value: _selectedSex,
+                                  decoration: InputDecoration(
+                                    labelText: 'Sex',
+                                    hintText: 'Select Sex',
+                                    hintStyle: GoogleFonts.poppins(
+                                      color: Colors.grey[500],
+                                    ),
+                                    prefixIcon: const Icon(
+                                      Icons.person_outline,
+                                      color: Color(0xFFFF6949),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[200]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFFF6949),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    errorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: const BorderSide(
+                                        color: Colors.redAccent,
+                                      ),
+                                    ),
+                                  ),
+                                  items:
+                                      _sexOptions
+                                          .map(
+                                            (sex) => DropdownMenuItem(
+                                              value: sex,
+                                              child: Text(sex),
+                                            ),
+                                          )
+                                          .toList(),
+                                  onChanged:
+                                      (value) =>
+                                          setState(() => _selectedSex = value),
+                                  validator:
+                                      (value) =>
+                                          value == null
+                                              ? 'Please select a sex'
+                                              : null,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _passwordController,
+                                  label: 'Password',
+                                  icon: Icons.lock,
+                                  obscureText: _obscurePassword,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                      color: const Color(0xFFFF6949),
+                                    ),
+                                    onPressed:
+                                        () => setState(
+                                          () =>
+                                              _obscurePassword =
+                                                  !_obscurePassword,
+                                        ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _adminPasswordController,
+                                  label: 'Your Admin Password',
+                                  icon: Icons.lock_outline,
+                                  obscureText: _obscureAdminPassword,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscureAdminPassword
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                      color: const Color(0xFFFF6949),
+                                    ),
+                                    onPressed:
+                                        () => setState(
+                                          () =>
+                                              _obscureAdminPassword =
+                                                  !_obscureAdminPassword,
+                                        ),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                _isLoading
+                                    ? const LoadingIndicator() // Using your custom LoadingIndicator
+                                    : Center(
+                                      child: CustomButton(
+                                        text: 'Create Admin',
+                                        onPressed: _createAdmin,
+                                      ),
+                                    ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
     );
   }
 }

@@ -55,11 +55,15 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
         _selectedSex = _sexOptions.contains(userSex) ? userSex : null;
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to load profile: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load profile: $e')));
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -69,7 +73,8 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
       final currentUser = _authService.getCurrentUser();
       if (currentUser == null) throw Exception('No user logged in');
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
         allowMultiple: false,
       );
       if (result != null) {
@@ -91,14 +96,20 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
           }
         }
         _userData = await _firestoreService.getUser(currentUser.uid);
-        setState(() => _profileImageUrl = _userData!['profileImageUrl']);
+        if (mounted) {
+          setState(() => _profileImageUrl = _userData!['profileImageUrl']);
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
+      }
     } finally {
-      setState(() => _isUploading = false);
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
     }
   }
 
@@ -126,31 +137,55 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
         currentUser.uid,
         _userData!['email'] ?? currentUser.email!,
         'lecturer',
-        username: _nameController.text.trim(),
-        displayName: _nameController.text.trim(),
-        phoneNumber: _phoneController.text.trim(),
-        address: _majorController.text.trim(),
-        position: _degreeController.text.trim(),
-        dateOfBirth: _dobController.text.trim(),
+        username:
+            _nameController.text.trim().isEmpty
+                ? null
+                : _nameController.text.trim(),
+        displayName:
+            _nameController.text.trim().isEmpty
+                ? null
+                : _nameController.text.trim(),
+        phoneNumber:
+            _phoneController.text.trim().isEmpty
+                ? null
+                : _phoneController.text.trim(),
+        address:
+            _majorController.text.trim().isEmpty
+                ? null
+                : _majorController.text.trim(),
+        position:
+            _degreeController.text.trim().isEmpty
+                ? null
+                : _degreeController.text.trim(),
+        dateOfBirth:
+            _dobController.text.trim().isEmpty
+                ? null
+                : _dobController.text.trim(),
         userSex: _selectedSex,
         profileImageUrl: _profileImageUrl,
         passwordUpdatedAt: null,
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update profile: $e'),
-          backgroundColor: const Color.fromARGB(255, 255, 0, 0),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update profile: $e'),
+            backgroundColor: const Color.fromARGB(255, 255, 0, 0),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -167,7 +202,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth < 600; // Added declaration for isMobile
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -307,10 +342,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                   label: 'Full Name',
                                   icon: Icons.person,
                                   validator:
-                                      (value) =>
-                                          value == null || value.trim().isEmpty
-                                              ? 'Please enter a name'
-                                              : null,
+                                      null, // Removed validation to make optional
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
@@ -326,28 +358,28 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                                     r'^\+?[\d\s-]{10,}$',
                                                   ).hasMatch(value)
                                               ? 'Invalid phone number format'
-                                              : null,
+                                              : null, // Validation only if value is provided
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
                                   controller: _dobController,
-                                  label: 'Date of Birth (YYYY-MM-DD)',
+                                  label: 'Date of Birth',
                                   icon: Icons.calendar_today,
                                   readOnly: true,
                                   onTap: () => _selectDate(context),
                                   validator:
                                       (value) =>
-                                          value == null || value.trim().isEmpty
-                                              ? 'Please select a date of birth'
-                                              : !RegExp(
-                                                r'^\d{4}-\d{2}-\d{2}$',
-                                              ).hasMatch(value)
-                                              ? 'Invalid date format (use YYYY-MM-DD)'
-                                              : DateFormat('yyyy-MM-dd')
-                                                  .parseStrict(value)
-                                                  .isAfter(DateTime.now())
-                                              ? 'Date cannot be in the future'
-                                              : null,
+                                          value != null && value.isNotEmpty
+                                              ? (!RegExp(
+                                                    r'^\d{4}-\d{2}-\d{2}$',
+                                                  ).hasMatch(value)
+                                                  ? 'Invalid date format (use YYYY-MM-DD)'
+                                                  : DateFormat('yyyy-MM-dd')
+                                                      .parseStrict(value)
+                                                      .isAfter(DateTime.now())
+                                                  ? 'Date cannot be in the future'
+                                                  : null)
+                                              : null, // Validation only if value is provided
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
@@ -355,10 +387,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                   label: 'Major/Department',
                                   icon: Icons.school,
                                   validator:
-                                      (value) =>
-                                          value == null || value.trim().isEmpty
-                                              ? 'Please enter a major/department'
-                                              : null,
+                                      null, // Removed validation to make optional
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
@@ -366,10 +395,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                   label: 'Degree',
                                   icon: Icons.book,
                                   validator:
-                                      (value) =>
-                                          value == null || value.trim().isEmpty
-                                              ? 'Please enter a degree'
-                                              : null,
+                                      null, // Removed validation to make optional
                                 ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<String>(
@@ -410,9 +436,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                           setState(() => _selectedSex = value),
                                   validator:
                                       (value) =>
-                                          value == null
-                                              ? 'Please select a sex'
-                                              : null,
+                                          null, // Removed validation to make optional
                                 ),
                                 const SizedBox(height: 16),
                                 TextButton(

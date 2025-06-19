@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../routes.dart';
 import '../../models/interaction.dart';
-import 'package:flutter/foundation.dart'; // For debugPrint
+import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
@@ -27,6 +30,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   int _onlineUserCount = 0;
   double _growthRate = 0.0;
   String _appStatus = 'Stable';
+  String? _userName;
+  String? _profileImageUrl;
 
   @override
   void initState() {
@@ -46,84 +51,93 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _interactionError = null;
     });
+
     try {
-      _activeUsers = await _firestoreService.getActiveUsers(
-        roles: ['lecturer', 'student'],
-      );
-      _activeUserCount = _activeUsers.length;
+      final user = _authService.getCurrentUser();
+      if (user == null) throw Exception('No user logged in');
+
+      final userData = await _firestoreService.getUser(user.uid);
+      if (!mounted) return;
+      setState(() {
+        _userName = userData?['displayName'] as String? ?? 'Admin';
+        _profileImageUrl = userData?['profileImageUrl'] as String?;
+      });
+
+      final activeUsers = await _firestoreService.getActiveUsers();
+      if (!mounted) return;
+      setState(() {
+        _activeUsers = activeUsers;
+        _activeUserCount = activeUsers.length;
+      });
 
       final now = DateTime.now();
-      _onlineUserCount =
-          _activeUsers.where((user) {
-            final lastActive = user['lastActive']?.toDate() as DateTime?;
+      final onlineUserCount =
+          activeUsers.where((user) {
+            final lastActive = user['lastActive'] as Timestamp?;
             return lastActive != null &&
-                lastActive.isAfter(now.subtract(const Duration(minutes: 15)));
+                lastActive.toDate().isAfter(
+                  now.subtract(const Duration(minutes: 15)),
+                );
           }).length;
 
       final newUsers =
-          _activeUsers.where((user) {
-            final timestamp = user['createdAt']?.toDate() as DateTime?;
+          activeUsers.where((user) {
+            final timestamp = user['createdAt'] as Timestamp?;
             return timestamp != null &&
-                timestamp.isAfter(now.subtract(const Duration(days: 30)));
+                timestamp.toDate().isAfter(
+                  now.subtract(const Duration(days: 30)),
+                );
           }).length;
-      _growthRate =
-          (_activeUsers.isNotEmpty ? newUsers / _activeUsers.length : 0) * 100;
 
-      if (_growthRate > 5) {
-        _appStatus = 'Growing';
-      } else if (_growthRate < -2) {
-        _appStatus = 'Declining';
-      } else {
-        _appStatus = 'Stable';
-      }
+      if (!mounted) return;
+      setState(() {
+        _onlineUserCount = onlineUserCount;
+        _growthRate =
+            (activeUsers.isNotEmpty ? newUsers / activeUsers.length : 0) * 100;
+        _appStatus =
+            _growthRate > 5
+                ? 'Growing'
+                : _growthRate < -2
+                ? 'Declining'
+                : 'Stable';
+      });
 
-      final currentUser = _authService.getCurrentUser();
-      debugPrint('Current user: ${currentUser?.uid}');
-      if (currentUser != null) {
-        final userData = await _firestoreService.getUser(currentUser.uid);
-        debugPrint('User data: $userData');
-        if (userData == null || userData['role'] != 'admin') {
-          setState(() {
-            _interactionError = 'User is not an admin or user data not found';
-          });
-          _adminInteractions = [];
-        } else {
-          try {
-            _adminInteractions = await _firestoreService.getInteractions(
-              currentUser.uid,
-            );
-            debugPrint('Loaded ${_adminInteractions.length} interactions');
-          } catch (e) {
-            setState(() {
-              String errorMessage = e.toString();
-              if (errorMessage.contains('The query requires an index')) {
-                errorMessage =
-                    'Failed to load admin activities: The query requires an index. '
-                    'Create it here: https://console.firebase.google.com/v1/r/project/al-learn-db/firestore/indexes?create_composite=CIBwcm9qZWN0cy9haS1sZWFybl1kYi9kYXRhYmFzZXMVKG RIZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvaW50ZXJhY3Rpb25zL2luZGV4ZXMvXxABGgoKBnVzZXJ JZBABGg0KCXRpbWVzdGFtcBACGgwKCF9fbmFtZ VOFEAI';
-              } else {
-                errorMessage = 'Failed to load admin activities: $e';
-              }
-              _interactionError = errorMessage;
-            });
-            _adminInteractions = [];
-            debugPrint('Interaction loading error: $e');
-          }
-        }
-      } else {
+      if (userData == null || userData['role'] != 'admin') {
+        if (!mounted) return;
         setState(() {
-          _interactionError = 'No user logged in to load admin activities';
+          _interactionError = 'User is not an admin or user data not found';
+          _adminInteractions = [];
         });
-        _adminInteractions = [];
+      } else {
+        try {
+          final interactions = await _firestoreService.getInteractions(
+            user.uid,
+          );
+          if (!mounted) return;
+          setState(() {
+            _adminInteractions = interactions;
+          });
+          debugPrint('Loaded ${interactions.length} interactions');
+        } catch (e) {
+          if (!mounted) return;
+          setState(() {
+            _interactionError =
+                e.toString().contains('The query requires an index')
+                    ? 'Failed to load activities: Index required. Check Firebase Console.'
+                    : 'Failed to load activities: $e';
+            _adminInteractions = [];
+          });
+          debugPrint('Interaction loading error: $e');
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load dashboard data: $e')),
-        );
+        _showSnackBar('Failed to load dashboard: $e', Colors.redAccent);
       }
     } finally {
       if (mounted) {
@@ -133,20 +147,54 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Future<void> _logout() async {
-    try {
-      await _authService.signOut();
-      if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          Routes.login,
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to log out: $e')));
+    final confirmLogout = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              'Confirm Logout',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
+            content: Text(
+              'Are you sure you want to log out?',
+              style: GoogleFonts.poppins(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.poppins(color: Colors.grey[600]),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(
+                  'Logout',
+                  style: GoogleFonts.poppins(color: const Color(0xFFFF6949)),
+                ),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmLogout ?? false) {
+      try {
+        await _authService.signOut();
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            Routes.login,
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnackBar('Failed to log out: $e', Colors.redAccent);
+        }
       }
     }
   }
@@ -154,104 +202,244 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   void _showAccountDetails() async {
     final currentUser = _authService.getCurrentUser();
     if (currentUser == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No user logged in')));
+      _showSnackBar('No user logged in', Colors.redAccent);
       return;
     }
 
     try {
       final userData = await _firestoreService.getUser(currentUser.uid);
       if (userData == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('User data not found')));
+        _showSnackBar('User data not found', Colors.redAccent);
         return;
       }
 
-      showDialog(
+      if (!mounted) return;
+      showModalBottomSheet(
         context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
         builder:
-            (context) => AlertDialog(
-              title: const Text('Account Details'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Email: ${userData['email'] ?? 'N/A'}'),
-                  const SizedBox(height: 8),
-                  Text('Username: ${userData['username'] ?? 'N/A'}'),
-                  const SizedBox(height: 8),
-                  Text('Role: ${userData['role'] ?? 'N/A'}'),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
-                ),
-              ],
+            (context) => DraggableScrollableSheet(
+              initialChildSize: 0.5,
+              minChildSize: 0.3,
+              maxChildSize: 0.7,
+              builder:
+                  (context, scrollController) => Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Center(
+                              child: Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Account Details',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 24,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            _buildDetailRow(
+                              'Email',
+                              userData['email'] as String? ?? 'N/A',
+                            ),
+                            _buildDetailRow(
+                              'Username',
+                              userData['username'] as String? ?? 'N/A',
+                            ),
+                            _buildDetailRow(
+                              'Role',
+                              userData['role'] as String? ?? 'N/A',
+                            ),
+                            const SizedBox(height: 24),
+                            Center(
+                              child: ElevatedButton(
+                                onPressed: () => Navigator.pop(context),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFF6949),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Close',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
             ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load account details: $e')),
-      );
+      if (mounted) {
+        _showSnackBar('Failed to load account details: $e', Colors.redAccent);
+      }
     }
   }
 
   void _showFullActivityDetails(Interaction interaction) {
-    showDialog(
+    if (!mounted) return;
+    showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder:
-          (context) => AlertDialog(
-            title: const Text('Activity Details'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _getActionDescription(interaction),
-                  style: const TextStyle(fontSize: 16),
+          (context) => DraggableScrollableSheet(
+            initialChildSize: 0.4,
+            minChildSize: 0.3,
+            maxChildSize: 0.6,
+            builder:
+                (context, scrollController) => Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Activity Details',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 24,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          _buildDetailRow(
+                            'Action',
+                            _getActionDescription(interaction),
+                          ),
+                          _buildDetailRow(
+                            'Timestamp',
+                            DateFormat(
+                              'MMM dd, yyyy HH:mm',
+                            ).format(interaction.timestamp.toDate()),
+                          ),
+                          const SizedBox(height: 24),
+                          Center(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFF6949),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'Close',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Timestamp: ${interaction.timestamp.toDate()}',
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-            ],
           ),
     );
   }
 
   List<Map<String, dynamic>> _filteredUsers() {
-    if (_searchQuery.isEmpty) {
-      return _activeUsers;
-    }
-    return _activeUsers
-        .where(
-          (user) =>
-              (user['email']?.toLowerCase().contains(_searchQuery) ?? false),
-        )
-        .toList();
+    return _searchQuery.isEmpty
+        ? _activeUsers
+            .where(
+              (user) => ['student', 'admin', 'lecturer'].contains(user['role']),
+            )
+            .toList()
+        : _activeUsers
+            .where(
+              (user) =>
+                  ['student', 'admin', 'lecturer'].contains(user['role']) &&
+                  (user['email']?.toLowerCase().contains(_searchQuery) ??
+                      false),
+            )
+            .toList();
   }
 
   List<BarChartGroupData> _createUserRegistrationChartData() {
     final Map<String, int> userCounts = {};
     final now = DateTime.now();
     for (int i = 6; i >= 0; i--) {
-      final date = now.subtract(Duration(days: i)).toString().split(' ')[0];
+      final date = DateFormat(
+        'yyyy-MM-dd',
+      ).format(now.subtract(Duration(days: i)));
       userCounts[date] = 0;
     }
     for (var user in _activeUsers) {
-      final date = user['createdAt']?.toDate().toString().split(' ')[0];
+      final timestamp = user['createdAt'] as Timestamp?;
+      final date = timestamp?.toDate().toString().split(' ')[0];
       if (date != null && userCounts.containsKey(date)) {
         userCounts[date] = userCounts[date]! + 1;
       }
@@ -264,9 +452,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           barRods: [
             BarChartRodData(
               toY: entry.value.toDouble(),
-              color: Colors.blueAccent,
-              width: 12,
+              color: const Color(0xFFFF6949),
+              width: 16,
               borderRadius: BorderRadius.circular(4),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: 10,
+                color: Colors.grey[100],
+              ),
             ),
           ],
         ),
@@ -277,637 +470,971 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
   List<String> _getChartLabels() {
     final now = DateTime.now();
-    final List<String> labels = [];
-    for (int i = 6; i >= 0; i--) {
-      final date = now
-          .subtract(Duration(days: i))
-          .toString()
-          .split(' ')[0]
-          .substring(5);
-      labels.add(date);
-    }
-    return labels;
+    return List.generate(
+      7,
+      (i) => DateFormat('MMM dd').format(now.subtract(Duration(days: 6 - i))),
+    );
   }
 
   IconData _getActionIcon(String action) {
-    switch (action) {
-      case 'create_lecturer':
-        return Icons.person_add;
-      case 'create_admin':
-        return Icons.admin_panel_settings;
-      case 'delete_user':
-        return Icons.delete;
-      case 'suspend_user':
-        return Icons.block;
-      case 'unsuspend_user':
-        return Icons.check_circle;
-      case 'create_course':
-        return Icons.book;
-      case 'upload_material':
-        return Icons.upload_file;
-      default:
-        return Icons.event;
-    }
+    const actionIcons = {
+      'create_lecturer': Icons.person_add,
+      'create_admin': Icons.admin_panel_settings,
+      'delete_user': Icons.delete,
+      'suspend_user': Icons.block,
+      'unsuspend_user': Icons.check_circle,
+      'create_course': Icons.book,
+      'upload_material': Icons.upload_file,
+    };
+    return actionIcons[action] ?? Icons.event;
   }
 
   String _getActionDescription(Interaction interaction) {
-    String admin = interaction.adminName ?? 'Unknown Admin';
-    String action = interaction.action;
-    String target = interaction.targetName ?? 'Unknown User';
-    String targetType = 'account';
+    final admin = interaction.adminName ?? 'Unknown Admin';
+    final action = interaction.action;
+    final target = interaction.targetName ?? 'Unknown User';
+    const targetType = 'account';
 
-    switch (action) {
-      case 'create_lecturer':
-        return 'Admin $admin created lecturer $targetType $target';
-      case 'create_admin':
-        return 'Admin $admin created admin $targetType $target';
-      case 'delete_user':
-        return 'Admin $admin deleted $targetType $target';
-      case 'suspend_user':
-        return 'Admin $admin suspended $targetType $target';
-      case 'unsuspend_user':
-        return 'Admin $admin unsuspended $targetType $target';
-      case 'create_course':
-        return 'Admin $admin created a course${interaction.courseId != null ? " (${interaction.courseId})" : ""}';
-      case 'upload_material':
-        return 'Admin $admin uploaded material${interaction.courseId != null ? " to course ${interaction.courseId}" : ""}';
-      default:
-        return interaction.details ?? 'Admin $admin performed an action';
-    }
+    const actionDescriptions = {
+      'create_lecturer': 'Created lecturer $targetType',
+      'create_admin': 'Created admin $targetType',
+      'delete_user': 'Deleted $targetType',
+      'suspend_user': 'Suspended $targetType',
+      'unsuspend_user': 'Unsuspended $targetType',
+      'create_course': 'Created course',
+      'upload_material': 'Uploaded material',
+    };
+
+    return actionDescriptions[action]?.replaceFirst(targetType, target) ??
+        (interaction.details ?? 'Performed an action');
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
     final filteredUsers = _filteredUsers();
     final chartLabels = _getChartLabels();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Admin Dashboard',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          semanticsLabel: 'Admin Dashboard',
-        ),
-        elevation: 2,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Theme.of(context).primaryColor,
-                const Color.fromARGB(255, 248, 138, 11),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle, color: Colors.white),
-            tooltip: 'Account Details',
-            onPressed: _showAccountDetails,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            tooltip: 'Logout',
-            onPressed: _logout,
-          ),
-        ],
-      ),
+      backgroundColor: Colors.grey[100],
       body:
           _isLoading
-              ? const LoadingIndicator()
-              : RefreshIndicator(
-                onRefresh: _loadData,
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16.0),
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: InputDecoration(
-                              hintText:
-                                  'Search lecturers or students by email...',
-                              prefixIcon: const Icon(
-                                Icons.search,
-                                color: Colors.grey,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor: Colors.grey[100],
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 14.0,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: Colors.grey[300]!,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: Theme.of(context).primaryColor,
-                                  width: 2,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: _buildSummaryCard(
-                                context,
-                                title: 'Active Users',
-                                count: _activeUserCount,
-                                icon: Icons.people,
-                                gradient: [Colors.blue, Colors.blueAccent],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildSummaryCard(
-                                context,
-                                title: 'Online Users',
-                                count: _onlineUserCount,
-                                icon: Icons.wifi,
-                                gradient: [Colors.green, Colors.greenAccent],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildSummaryCard(
-                                context,
-                                title: 'Growth Rate',
-                                count:
-                                    '${_growthRate.toStringAsFixed(1)}% ($_appStatus)',
-                                icon:
-                                    _growthRate >= 0
-                                        ? Icons.trending_up
-                                        : Icons.trending_down,
-                                gradient:
-                                    _growthRate >= 0
-                                        ? [Colors.teal, Colors.tealAccent]
-                                        : [Colors.red, Colors.redAccent],
-                              ),
+              ? const Center(child: LoadingIndicator())
+              : CustomScrollView(
+                slivers: [
+                  SliverAppBar(
+                    expandedHeight: 200,
+                    floating: false,
+                    pinned: true,
+                    toolbarHeight: 60,
+                    flexibleSpace: FlexibleSpaceBar(
+                      centerTitle: true,
+                      title: Text(
+                        'Admin Dashboard',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          fontSize: isMobile ? 20 : 24,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 20),
-                        Card(
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                      ),
+                      background: Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFFFF6949), Color(0xFFFF8A65)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Active Users: $_activeUserCount',
-                                  style: Theme.of(
+                        ),
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFFF6949),
+                    elevation: 0,
+                    leading: IconButton(
+                      icon: const Icon(Icons.logout, color: Colors.white),
+                      tooltip: 'Logout',
+                      onPressed: _logout,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white10,
+                      ),
+                    ),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        tooltip: 'Refresh',
+                        onPressed: _loadData,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white10,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                    ],
+                  ),
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 16 : 24,
+                      vertical: 24,
+                    ),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        _buildWelcomeCard(context, isMobile),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Dashboard Overview',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                            fontSize: isMobile ? 24 : 28,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Monitor and manage platform activity',
+                          style: GoogleFonts.poppins(
+                            color: Colors.grey[600],
+                            fontSize: isMobile ? 14 : 16,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        _buildOverviewCard(context, isMobile),
+                        const SizedBox(height: 24),
+                        _buildQuickActionsCard(context, isMobile),
+                        const SizedBox(height: 24),
+                        LayoutBuilder(
+                          builder:
+                              (context, constraints) => GridView.count(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                crossAxisCount: isMobile ? 1 : 2,
+                                crossAxisSpacing: 4,
+                                mainAxisSpacing: 4,
+                                childAspectRatio:
+                                    isMobile
+                                        ? constraints.maxWidth / 400
+                                        : constraints.maxWidth / 800,
+                                children: [
+                                  _buildActiveUsersCard(
                                     context,
-                                  ).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).primaryColor,
-                                    fontSize:
-                                        MediaQuery.of(context).size.width > 600
-                                            ? 24
-                                            : 20,
+                                    isMobile,
+                                    filteredUsers,
                                   ),
-                                  semanticsLabel:
-                                      'Active Users: $_activeUserCount',
-                                ),
-                                const SizedBox(height: 16),
-                                if (filteredUsers.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 16.0,
-                                    ),
-                                    child: Text(
-                                      'No lecturers or students found.',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  ...filteredUsers.map(
-                                    (user) => ListTile(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 8.0,
-                                            vertical: 4,
-                                          ),
-                                      title: Text(
-                                        user['email'] ?? 'No Email',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize:
-                                              MediaQuery.of(
-                                                        context,
-                                                      ).size.width >
-                                                      600
-                                                  ? 16
-                                                  : 14,
-                                        ),
-                                      ),
-                                      subtitle: Text(
-                                        'Role: ${user['role'] ?? 'Unknown'}',
-                                        style: TextStyle(
-                                          fontSize:
-                                              MediaQuery.of(
-                                                        context,
-                                                      ).size.width >
-                                                      600
-                                                  ? 14
-                                                  : 12,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                      trailing: Icon(
-                                        user['lastActive'] != null &&
-                                                (user['lastActive'].toDate()
-                                                        as DateTime)
-                                                    .isAfter(
-                                                      DateTime.now().subtract(
-                                                        const Duration(
-                                                          minutes: 15,
-                                                        ),
-                                                      ),
-                                                    )
-                                            ? Icons.wifi
-                                            : Icons.wifi_off,
-                                        color:
-                                            user['lastActive'] != null &&
-                                                    (user['lastActive'].toDate()
-                                                            as DateTime)
-                                                        .isAfter(
-                                                          DateTime.now()
-                                                              .subtract(
-                                                                const Duration(
-                                                                  minutes: 15,
-                                                                ),
-                                                              ),
-                                                        )
-                                                ? Colors.green
-                                                : Colors.grey,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
+                                  _buildRecentActivitiesCard(context, isMobile),
+                                ],
+                              ),
                         ),
-                        const SizedBox(height: 20),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 12.0,
-                          runSpacing: 12.0,
-                          children: [
-                            _buildActionButton(
-                              context,
-                              label: 'Create Lecturer',
-                              icon: Icons.person_add,
-                              route: Routes.createLecturer,
-                            ),
-                            _buildActionButton(
-                              context,
-                              label: 'Create Admin',
-                              icon: Icons.admin_panel_settings,
-                              route: Routes.createAdmin,
-                            ),
-                            _buildActionButton(
-                              context,
-                              label: 'Manage Users',
-                              icon: Icons.group,
-                              route: Routes.userManagement,
-                            ),
-                          ],
+                        const SizedBox(height: 24),
+                        _buildUserRegistrationCard(
+                          context,
+                          isMobile,
+                          chartLabels,
                         ),
-                        const SizedBox(height: 20),
-                        Card(
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'New Users (Last 7 Days)',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).primaryColor,
-                                    fontSize:
-                                        MediaQuery.of(context).size.width > 600
-                                            ? 24
-                                            : 20,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                SizedBox(
-                                  height: 200,
-                                  child: BarChart(
-                                    BarChartData(
-                                      alignment: BarChartAlignment.spaceAround,
-                                      barGroups:
-                                          _createUserRegistrationChartData(),
-                                      titlesData: FlTitlesData(
-                                        leftTitles: AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: true,
-                                            reservedSize: 40,
-                                            getTitlesWidget: (value, meta) {
-                                              return Text(
-                                                value.toInt().toString(),
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.grey,
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                        bottomTitles: AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: true,
-                                            getTitlesWidget: (value, meta) {
-                                              if (value.toInt() <
-                                                  chartLabels.length) {
-                                                return Text(
-                                                  chartLabels[value.toInt()],
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.grey,
-                                                  ),
-                                                );
-                                              }
-                                              return const Text('');
-                                            },
-                                          ),
-                                        ),
-                                        topTitles: const AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: false,
-                                          ),
-                                        ),
-                                        rightTitles: const AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: false,
-                                          ),
-                                        ),
-                                      ),
-                                      borderData: FlBorderData(show: false),
-                                      gridData: const FlGridData(show: false),
-                                      barTouchData: BarTouchData(
-                                        enabled: true,
-                                        touchTooltipData: BarTouchTooltipData(
-                                          getTooltipItem: (
-                                            group,
-                                            groupIndex,
-                                            rod,
-                                            rodIndex,
-                                          ) {
-                                            return BarTooltipItem(
-                                              rod.toY.toInt().toString(),
-                                              const TextStyle(
-                                                color: Colors.white,
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Card(
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Recent Admin Activities',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).primaryColor,
-                                    fontSize:
-                                        MediaQuery.of(context).size.width > 600
-                                            ? 24
-                                            : 20,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                if (_interactionError != null)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16.0,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _interactionError!,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.red,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        TextButton(
-                                          onPressed: () async {
-                                            setState(() => _isLoading = true);
-                                            await Future.delayed(
-                                              const Duration(seconds: 5),
-                                            );
-                                            await _loadData();
-                                          },
-                                          child: const Text(
-                                            'Retry After Index Creation',
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                else if (_adminInteractions.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 16.0,
-                                    ),
-                                    child: Text(
-                                      'No admin activities recorded yet.',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  SizedBox(
-                                    height:
-                                        300, // Fixed height for scrollable area
-                                    child: SingleChildScrollView(
-                                      child: Column(
-                                        children:
-                                            _adminInteractions
-                                                .take(50)
-                                                .map(
-                                                  (
-                                                    interaction,
-                                                  ) => GestureDetector(
-                                                    onLongPress:
-                                                        () =>
-                                                            _showFullActivityDetails(
-                                                              interaction,
-                                                            ),
-                                                    child: ListTile(
-                                                      dense: true,
-                                                      leading: Icon(
-                                                        _getActionIcon(
-                                                          interaction.action,
-                                                        ),
-                                                        color:
-                                                            Theme.of(
-                                                              context,
-                                                            ).primaryColor,
-                                                      ),
-                                                      title: Text(
-                                                        _getActionDescription(
-                                                          interaction,
-                                                        ),
-                                                        style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          fontSize:
-                                                              MediaQuery.of(
-                                                                        context,
-                                                                      ).size.width >
-                                                                      600
-                                                                  ? 15
-                                                                  : 13,
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow:
-                                                            TextOverflow
-                                                                .ellipsis,
-                                                      ),
-                                                      subtitle: Text(
-                                                        interaction.timestamp
-                                                            .toDate()
-                                                            .toString(),
-                                                        style: TextStyle(
-                                                          fontSize:
-                                                              MediaQuery.of(
-                                                                        context,
-                                                                      ).size.width >
-                                                                      600
-                                                                  ? 13
-                                                                  : 11,
-                                                          color:
-                                                              Colors.grey[600],
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow:
-                                                            TextOverflow
-                                                                .ellipsis,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                )
-                                                .toList(),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Center(
+                        const SizedBox(height: 32),
+                        Center(
                           child: Text(
-                            'Copyright © 2025',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            '© 2025 Hybrid LMS',
+                            style: GoogleFonts.poppins(
+                              color: Colors.grey[600],
+                              fontSize: isMobile ? 12 : 14,
+                            ),
                           ),
                         ),
-                      ],
+                      ]),
                     ),
                   ),
-                ),
+                ],
               ),
     );
   }
 
-  Widget _buildSummaryCard(
-    BuildContext context, {
-    required String title,
-    required dynamic count,
-    required IconData icon,
+  Widget _buildWelcomeCard(BuildContext context, bool isMobile) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: _showAccountDetails,
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 16 : 20),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: isMobile ? 24 : 28,
+                backgroundImage:
+                    _profileImageUrl != null
+                        ? NetworkImage(_profileImageUrl!)
+                        : null,
+                child:
+                    _profileImageUrl == null
+                        ? const Icon(
+                          Icons.person,
+                          color: Colors.white,
+                          size: 28,
+                        )
+                        : null,
+                backgroundColor: const Color(0xFFFF6949),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Welcome, ${_userName ?? 'Admin'}!',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: isMobile ? 18 : 20,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'View profile and settings',
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey[600],
+                        fontSize: isMobile ? 12 : 14,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                color: Color(0xFFFF6949),
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchCard(BuildContext context, bool isMobile) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Search by email...',
+          hintStyle: GoogleFonts.poppins(
+            color: Colors.grey[500],
+            fontSize: isMobile ? 14 : 16,
+          ),
+          prefixIcon: const Icon(Icons.search, color: Color(0xFFFF6949)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 12,
+            horizontal: 16,
+          ),
+        ),
+        style: GoogleFonts.poppins(fontSize: isMobile ? 14 : 16),
+      ),
+    );
+  }
+
+  Widget _buildOverviewCard(BuildContext context, bool isMobile) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: isMobile ? 2 : 3,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: isMobile ? 1.1 : 1.3,
+      children: [
+        _buildStatCard(
+          'Active Users',
+          _activeUserCount,
+          Icons.people,
+          context,
+          isMobile,
+          gradient: [const Color(0xFFFF6949), const Color(0xFFFF8A65)],
+        ),
+        _buildStatCard(
+          'Online Users',
+          _onlineUserCount,
+          Icons.wifi,
+          context,
+          isMobile,
+          gradient: [const Color(0xFF2196F3), const Color(0xFF42A5F5)],
+        ),
+        _buildStatCard(
+          'Growth Rate',
+          '${_growthRate.toStringAsFixed(1)}% ($_appStatus)',
+          _growthRate >= 0 ? Icons.trending_up : Icons.trending_down,
+          context,
+          isMobile,
+          gradient: [const Color(0xFF4CAF50), const Color(0xFF66BB6A)],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActiveUsersCard(
+    BuildContext context,
+    bool isMobile,
+    List<Map<String, dynamic>> filteredUsers,
+  ) {
+    final displayUsers = filteredUsers.toList();
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 16 : 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Active Users ($_activeUserCount)',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 18 : 20,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildSearchCard(context, isMobile),
+            const SizedBox(height: 12),
+            if (displayUsers.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: Text(
+                    'No users found',
+                    style: GoogleFonts.poppins(
+                      color: Colors.grey[600],
+                      fontSize: isMobile ? 14 : 16,
+                    ),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height:
+                    isMobile
+                        ? 180
+                        : 200, // Constrained height to match activities
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: displayUsers.length,
+                  itemBuilder:
+                      (context, index) => Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: _buildUserCard(displayUsers[index], isMobile),
+                      ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            if (filteredUsers.length > 4)
+              Center(
+                child: TextButton(
+                  onPressed:
+                      () => Navigator.pushNamed(context, Routes.userManagement),
+                  child: Text(
+                    'View All Users',
+                    style: GoogleFonts.poppins(
+                      color: const Color(0xFFFF6949),
+                      fontWeight: FontWeight.w600,
+                      fontSize: isMobile ? 14 : 16,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserCard(Map<String, dynamic> user, bool isMobile) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 300),
+      builder:
+          (context, value, child) => Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, 20 * (1 - value)),
+              child: child,
+            ),
+          ),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ListTile(
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 16,
+            vertical: 4,
+          ),
+          leading: CircleAvatar(
+            radius: isMobile ? 20 : 22,
+            backgroundColor: const Color(0xFFFF6949),
+            child: Text(
+              (user['email'] as String?)?.isNotEmpty == true
+                  ? (user['email'] as String)[0].toUpperCase()
+                  : '?',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: isMobile ? 14 : 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          title: Text(
+            (user['email'] as String?) ?? 'No Email',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+              fontSize: isMobile ? 14 : 16,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            'Role: ${(user['role'] as String?) ?? 'Unknown'}',
+            style: GoogleFonts.poppins(
+              color: Colors.grey[600],
+              fontSize: isMobile ? 12 : 13,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color:
+                  (user['lastActive'] as Timestamp?)?.toDate().isAfter(
+                            DateTime.now().subtract(
+                              const Duration(minutes: 15),
+                            ),
+                          ) ==
+                          true
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.grey.withOpacity(0.1),
+            ),
+            child: Icon(
+              (user['lastActive'] as Timestamp?)?.toDate().isAfter(
+                        DateTime.now().subtract(const Duration(minutes: 15)),
+                      ) ==
+                      true
+                  ? Icons.circle
+                  : Icons.circle_outlined,
+              color:
+                  (user['lastActive'] as Timestamp?)?.toDate().isAfter(
+                            DateTime.now().subtract(
+                              const Duration(minutes: 15),
+                            ),
+                          ) ==
+                          true
+                      ? Colors.green
+                      : Colors.grey,
+              size: 12,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsCard(BuildContext context, bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Actions',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            fontSize: isMobile ? 24 : 28,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Quick access to common administrative tasks',
+          style: GoogleFonts.poppins(
+            color: Colors.grey[600],
+            fontSize: isMobile ? 14 : 16,
+          ),
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: isMobile ? 2 : 3,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: isMobile ? 1.3 : 1.5,
+          children: [
+            _buildActionButton(
+              context,
+              label: 'Create Lecturer',
+              icon: Icons.person_add,
+              route: Routes.createLecturer,
+              isMobile: isMobile,
+            ),
+            _buildActionButton(
+              context,
+              label: 'Create Admin',
+              icon: Icons.admin_panel_settings,
+              route: Routes.createAdmin,
+              isMobile: isMobile,
+            ),
+            _buildActionButton(
+              context,
+              label: 'Manage Users',
+              icon: Icons.group,
+              route: Routes.userManagement,
+              isMobile: isMobile,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUserRegistrationCard(
+    BuildContext context,
+    bool isMobile,
+    List<String> chartLabels,
+  ) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 16 : 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'New Users (Last 7 Days)',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 18 : 20,
+                    color: Colors.black87,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.refresh,
+                    color: Color(0xFFFF6949),
+                    size: 20,
+                  ),
+                  onPressed: _loadData,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: isMobile ? 180 : 220,
+              child:
+                  _createUserRegistrationChartData().isEmpty
+                      ? Center(
+                        child: Text(
+                          'No data available',
+                          style: GoogleFonts.poppins(
+                            color: Colors.grey[600],
+                            fontSize: isMobile ? 14 : 16,
+                          ),
+                        ),
+                      )
+                      : BarChart(
+                        BarChartData(
+                          alignment: BarChartAlignment.spaceAround,
+                          barGroups: _createUserRegistrationChartData(),
+                          titlesData: FlTitlesData(
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 40,
+                                getTitlesWidget:
+                                    (value, meta) => Text(
+                                      value.toInt().toString(),
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.grey[600],
+                                        fontSize: isMobile ? 12 : 14,
+                                      ),
+                                    ),
+                              ),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                getTitlesWidget: (value, meta) {
+                                  final index = value.toInt();
+                                  return index < chartLabels.length
+                                      ? Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Text(
+                                          chartLabels[index],
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.grey[600],
+                                            fontSize: isMobile ? 12 : 14,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      )
+                                      : const SizedBox.shrink();
+                                },
+                              ),
+                            ),
+                            topTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            rightTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                          ),
+                          borderData: FlBorderData(show: false),
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            getDrawingHorizontalLine:
+                                (value) => FlLine(
+                                  color: Colors.grey[200],
+                                  strokeWidth: 0.5,
+                                ),
+                          ),
+                          barTouchData: BarTouchData(
+                            enabled: true,
+                            touchTooltipData: BarTouchTooltipData(
+                              tooltipPadding: const EdgeInsets.all(8),
+                              tooltipMargin: 8,
+                              tooltipBorder: const BorderSide(
+                                color: Color(0xFFFF6949),
+                              ),
+                              getTooltipColor: (_) => Colors.white,
+                              getTooltipItem:
+                                  (
+                                    group,
+                                    groupIndex,
+                                    rod,
+                                    rodIndex,
+                                  ) => BarTooltipItem(
+                                    '${rod.toY.toInt()} New Users\n${chartLabels[groupIndex]}',
+                                    GoogleFonts.poppins(
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: isMobile ? 12 : 14,
+                                    ),
+                                  ),
+                            ),
+                          ),
+                        ),
+                      ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  color: const Color(0xFFFF6949),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'New Users',
+                  style: GoogleFonts.poppins(
+                    color: Colors.grey[600],
+                    fontSize: isMobile ? 12 : 14,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecentActivitiesCard(BuildContext context, bool isMobile) {
+    final displayInteractions = _adminInteractions.take(4).toList();
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 16 : 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Recent Activities',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: isMobile ? 18 : 20,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_interactionError != null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _interactionError!,
+                    style: GoogleFonts.poppins(
+                      color: Colors.redAccent,
+                      fontSize: isMobile ? 12 : 14,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: ElevatedButton.icon(
+                      onPressed: _loadData,
+                      icon: const Icon(
+                        Icons.refresh,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      label: Text(
+                        'Retry',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          fontSize: isMobile ? 12 : 14,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF6949),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else if (displayInteractions.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: Text(
+                    'No activities recorded',
+                    style: GoogleFonts.poppins(
+                      color: Colors.grey[600],
+                      fontSize: isMobile ? 14 : 16,
+                    ),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: isMobile ? 250 : 250,
+                child: ListView.builder(
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: displayInteractions.length,
+                  itemBuilder:
+                      (context, index) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _buildActivityCard(
+                          displayInteractions[index],
+                          isMobile,
+                        ),
+                      ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActivityCard(Interaction interaction, bool isMobile) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 300),
+      builder:
+          (context, value, child) => Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, 20 * (1 - value)),
+              child: child,
+            ),
+          ),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _showFullActivityDetails(interaction),
+          child: ListTile(
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 16,
+              vertical: 4,
+            ),
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6949).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                _getActionIcon(interaction.action),
+                color: const Color(0xFFFF6949),
+                size: isMobile ? 20 : 22,
+              ),
+            ),
+            title: Text(
+              _getActionDescription(interaction),
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+                fontSize: isMobile ? 14 : 16,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              DateFormat(
+                'MMM dd, HH:mm',
+              ).format(interaction.timestamp.toDate()),
+              style: GoogleFonts.poppins(
+                color: Colors.grey[600],
+                fontSize: isMobile ? 12 : 13,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: const Icon(
+              Icons.chevron_right,
+              color: Color(0xFFFF6949),
+              size: 20,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+              fontSize: 14,
+            ),
+          ),
+          Flexible(
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(color: Colors.black87, fontSize: 14),
+              textAlign: TextAlign.right,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(
+    String title,
+    dynamic count,
+    IconData icon,
+    BuildContext context,
+    bool isMobile, {
     required List<Color> gradient,
   }) {
     return Card(
-      elevation: 4,
+      elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradient,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => debugPrint('$title tapped'),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
           ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 32, color: Colors.white),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: isMobile ? 24 : 28, color: Colors.white),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  fontSize: isMobile ? 12 : 14,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              count is String ? count : count.toString(),
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+              const SizedBox(height: 4),
+              Text(
+                count.toString(),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontSize: isMobile ? 18 : 22,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -918,44 +1445,85 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     required String label,
     required IconData icon,
     required String route,
+    required bool isMobile,
   }) {
-    return Builder(
-      builder: (BuildContext buttonContext) {
-        return ElevatedButton.icon(
-          onPressed: () async {
-            debugPrint('Button pressed: $label, navigating to $route');
-            try {
-              // Check if the route exists in the Navigator's route table
-              if (Navigator.of(buttonContext).canPop() ||
-                  ModalRoute.of(buttonContext)?.settings.name != route) {
-                await Navigator.pushNamed(buttonContext, route);
-                debugPrint('Successfully navigated to $route');
-              } else {
-                debugPrint('Route $route is already the current route');
-                ScaffoldMessenger.of(buttonContext).showSnackBar(
-                  SnackBar(content: Text('Already on $label page')),
-                );
-              }
-            } catch (e) {
-              debugPrint('Navigation error for route $route: $e');
-              ScaffoldMessenger.of(buttonContext).showSnackBar(
-                SnackBar(content: Text('Failed to navigate to $label: $e')),
-              );
-            }
-          },
-          icon: Icon(icon, size: 20),
-          label: Text(label),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            minimumSize: const Size(140, 48),
-            backgroundColor: Theme.of(context).primaryColor,
-            foregroundColor: Colors.white,
-          ),
-        );
+    return ElevatedButton(
+      onPressed: () async {
+        try {
+          final currentRoute = ModalRoute.of(context)?.settings.name;
+          if (currentRoute != route) {
+            await Navigator.pushNamed(context, route);
+          } else {
+            _showSnackBar('Already on $label page', const Color(0xFFFF6949));
+          }
+        } catch (e) {
+          _showSnackBar('Navigation failed: $e', Colors.redAccent);
+        }
       },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFFFF6949),
+        foregroundColor: Colors.white,
+        padding: EdgeInsets.symmetric(
+          vertical: isMobile ? 10 : 12,
+          horizontal: isMobile ? 12 : 16,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 2,
+        alignment: Alignment.center, // Centered content
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: isMobile ? 28 : 32,
+            color: Colors.white,
+          ), // Larger icon
+          const SizedBox(height: 8), // Increased space between icon and text
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+              fontSize: isMobile ? 12 : 14,
+            ),
+            textAlign: TextAlign.center, // Centered text
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnackBar(String message, Color backgroundColor) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              backgroundColor == Colors.redAccent
+                  ? Icons.error_outline
+                  : Icons.info_outline,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: backgroundColor,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 }

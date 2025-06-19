@@ -1,222 +1,300 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
-import 'package:hybridlms/pages/lecturer/change_password_for_lecturer_page.dart';
-import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/custom_button.dart';
-import 'package:hybridlms/pages/lecturer/change_password_for_lecturer_page.dart';
+import '../../models/interaction.dart';
 
-class LecturerSettingsPage extends StatefulWidget {
-  const LecturerSettingsPage({super.key});
+class CreateLecturerPage extends StatefulWidget {
+  const CreateLecturerPage({super.key});
 
   @override
-  State<LecturerSettingsPage> createState() => _LecturerSettingsPageState();
+  State<CreateLecturerPage> createState() => _CreateLecturerPageState();
 }
 
-class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
-  final FirestoreService _firestoreService = FirestoreService();
-  final AuthService _authService = AuthService();
+class _CreateLecturerPageState extends State<CreateLecturerPage> {
   final _formKey = GlobalKey<FormState>();
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _majorController = TextEditingController();
-  final TextEditingController _degreeController = TextEditingController();
-  final TextEditingController _dobController = TextEditingController();
-  String? _profileImageUrl;
+  final TextEditingController _adminPasswordController =
+      TextEditingController();
   String? _selectedSex;
-  bool _isLoading = true;
-  bool _isUploading = false;
-  Map<String, dynamic>? _userData;
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+  bool _obscureAdminPassword = true;
   final List<String> _sexOptions = ['Male', 'Female', 'Other'];
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
-  }
-
-  Future<void> _loadProfile() async {
-    setState(() => _isLoading = true);
-    try {
-      final currentUser = _authService.getCurrentUser();
-      if (currentUser == null) throw Exception('No user logged in');
-      _userData = await _firestoreService.getUser(currentUser.uid);
-      if (_userData != null) {
-        _nameController.text = _userData!['displayName'] ?? '';
-        _phoneController.text = _userData!['phoneNumber'] ?? '';
-        _majorController.text = _userData!['address'] ?? '';
-        _degreeController.text = _userData!['position'] ?? '';
-        _dobController.text = _userData!['dateOfBirth'] ?? '';
-        _profileImageUrl = _userData!['profileImageUrl'];
-        final userSex = _userData!['userSex'] as String?;
-        _selectedSex = _sexOptions.contains(userSex) ? userSex : null;
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to load profile: $e')));
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _uploadProfileImage() async {
-    setState(() => _isUploading = true);
-    try {
-      final currentUser = _authService.getCurrentUser();
-      if (currentUser == null) throw Exception('No user logged in');
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-      );
-      if (result != null) {
-        if (kIsWeb) {
-          if (result.files.single.bytes != null) {
-            await _firestoreService.uploadProfilePicture(
-              result.files.single.bytes!,
-              currentUser.uid,
-              currentUser.uid,
-            );
-          }
-        } else {
-          if (result.files.single.path != null) {
-            await _firestoreService.uploadProfilePicture(
-              result.files.single.path!,
-              currentUser.uid,
-              currentUser.uid,
-            );
-          }
-        }
-        _userData = await _firestoreService.getUser(currentUser.uid);
-        setState(() => _profileImageUrl = _userData!['profileImageUrl']);
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
-    } finally {
-      setState(() => _isUploading = false);
-    }
-  }
-
-  Future<void> _selectDate(BuildContext context) async {
-    DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+    _emailController.text = '@lecturerhlms.com';
+    _emailController.selection = TextSelection.fromPosition(
+      TextPosition(offset: 0),
     );
-    if (picked != null) {
-      setState(() {
-        _dobController.text = DateFormat('yyyy-MM-dd').format(picked);
-      });
+  }
+
+  Future<bool> _verifyAdminPassword() async {
+    try {
+      final isValid = await _authService.reAuthenticateAdmin(
+        _adminPasswordController.text,
+      );
+      if (!isValid) {
+        _showSnackBar('Incorrect admin password');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      _showSnackBar('Authentication failed: ${e.toString()}');
+      return false;
     }
   }
 
-  Future<void> _updateProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-
-    // Check if any field has been edited
-    bool hasChanges = false;
-    if (_userData != null) {
-      hasChanges =
-          _nameController.text.trim() != (_userData!['displayName'] ?? '') ||
-          _phoneController.text.trim() != (_userData!['phoneNumber'] ?? '') ||
-          _majorController.text.trim() != (_userData!['address'] ?? '') ||
-          _degreeController.text.trim() != (_userData!['position'] ?? '') ||
-          _dobController.text.trim() != (_userData!['dateOfBirth'] ?? '') ||
-          _selectedSex != (_userData!['userSex'] as String?) ||
-          _profileImageUrl != _userData!['profileImageUrl'];
+  Future<void> _createLecturer() async {
+    final errors = <String>[];
+    if (_nameController.text.trim().isEmpty) {
+      errors.add('Please enter a name');
+    } else if (_nameController.text.trim().length < 2) {
+      errors.add('Name must be at least 2 characters');
+    }
+    if (_emailController.text.trim().isEmpty) {
+      errors.add('Please enter an email');
+    } else if (!_emailController.text.trim().endsWith('@lecturerhlms.com')) {
+      errors.add('Email must end with @lecturerhlms.com');
+    } else if (!RegExp(
+      r'^[a-zA-Z0-9._%+-]+@lecturerhlms\.com$',
+    ).hasMatch(_emailController.text.trim())) {
+      errors.add('Invalid email format');
+    }
+    if (_phoneController.text.trim().isEmpty) {
+      errors.add('Please enter a phone number');
+    } else if (!RegExp(
+      r'^\+?[\d\s-]{10,}$',
+    ).hasMatch(_phoneController.text.trim())) {
+      errors.add('Invalid phone number format');
+    }
+    if (_selectedSex == null) {
+      errors.add('Please select a sex');
+    }
+    if (_passwordController.text.trim().isEmpty) {
+      errors.add('Please enter a password');
+    } else if (_passwordController.text.trim().length < 8) {
+      errors.add('Password must be at least 8 characters');
+    } else if (!RegExp(
+      r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$',
+    ).hasMatch(_passwordController.text.trim())) {
+      errors.add('Must include uppercase, lowercase, number, and symbol');
+    }
+    if (_adminPasswordController.text.trim().isEmpty) {
+      errors.add('Please enter your admin password');
     }
 
-    if (!hasChanges) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please edit the information before updating'),
-          backgroundColor: Color.fromARGB(255, 255, 0, 0),
-        ),
-      );
-      setState(() => _isLoading = false);
+    if (errors.isNotEmpty) {
+      _showSnackBar(errors.first);
       return;
     }
 
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Confirm Lecturer Creation'),
+            content: const Text(
+              'Are you sure you want to create this lecturer account?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Confirm'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+
     try {
       final currentUser = _authService.getCurrentUser();
       if (currentUser == null) throw Exception('No user logged in');
+
+      final isVerified = await _verifyAdminPassword();
+      if (!isVerified) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final email = _emailController.text.trim();
+      final newUser = await _authService.createUserWithoutSignIn(
+        email,
+        _passwordController.text.trim(),
+        'lecturer', // Changed role to 'lecturer'
+        username: _nameController.text.trim(),
+      );
+
+      if (newUser == null) throw Exception('Failed to create user');
+
       await _firestoreService.saveUser(
-        currentUser.uid,
-        _userData!['email'] ?? currentUser.email!,
-        'lecturer',
-        username:
-            _nameController.text.trim().isNotEmpty
-                ? _nameController.text.trim()
-                : null,
-        displayName:
-            _nameController.text.trim().isNotEmpty
-                ? _nameController.text.trim()
-                : null,
-        phoneNumber:
-            _phoneController.text.trim().isNotEmpty
-                ? _phoneController.text.trim()
-                : null,
-        address:
-            _majorController.text.trim().isNotEmpty
-                ? _majorController.text.trim()
-                : null,
-        position:
-            _degreeController.text.trim().isNotEmpty
-                ? _degreeController.text.trim()
-                : null,
-        dateOfBirth:
-            _dobController.text.trim().isNotEmpty
-                ? _dobController.text.trim()
-                : null,
-        userSex: _selectedSex,
-        profileImageUrl: _profileImageUrl,
+        newUser.uid,
+        email,
+        'lecturer', // Changed role to 'lecturer'
+        username: _nameController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+        dateOfBirth: _selectedSex,
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated successfully'),
-          backgroundColor: Colors.green,
-        ),
+
+      final interaction = Interaction(
+        userId: currentUser.uid,
+        action: 'create_lecturer',
+        targetId: newUser.uid,
+        details: 'Created lecturer: $email',
+        timestamp: Timestamp.now(),
+        adminName: currentUser.email?.split('@')[0] ?? 'Unknown Admin',
       );
+      await _firestoreService.logInteraction(interaction);
+
+      _showSnackBar('Lecturer created successfully: $email');
+      _clearForm();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update profile: $e'),
-          backgroundColor: const Color.fromARGB(255, 255, 0, 0),
-        ),
-      );
+      String errorMessage = 'Failed to create lecturer';
+      if (e.toString().contains('email-already-in-use')) {
+        errorMessage = 'This email is already in use';
+      } else if (e.toString().contains('network-request-failed')) {
+        errorMessage = 'Network error, please try again';
+      } else {
+        errorMessage = 'Failed to create lecturer: ${e.toString()}';
+      }
+      _showSnackBar(errorMessage);
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  void _clearForm() {
+    _nameController.clear();
+    _emailController.text = '@lecturerhlms.com';
+    _emailController.selection = TextSelection.fromPosition(
+      TextPosition(offset: 0),
+    );
+    _passwordController.clear();
+    _phoneController.clear();
+    _adminPasswordController.clear();
+    setState(() => _selectedSex = null);
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              message.contains('success') ? Icons.check_circle : Icons.error,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor:
+            message.contains('success')
+                ? Colors.green
+                : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        action: SnackBarAction(
+          label: 'Dismiss',
+          textColor: Colors.white,
+          onPressed: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     _phoneController.dispose();
-    _majorController.dispose();
-    _degreeController.dispose();
-    _dobController.dispose();
+    _adminPasswordController.dispose();
     super.dispose();
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    Widget? suffixIcon,
+  }) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: 'Enter $label',
+        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
+        prefixIcon: Icon(icon, color: const Color(0xFFFF6949)),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey[200]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFFFF6949), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.redAccent),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+        ),
+        labelStyle: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 16),
+      ),
+      keyboardType: keyboardType,
+      obscureText: obscureText,
+      style: GoogleFonts.poppins(fontSize: isMobile ? 14 : 16),
+      validator: (value) => value!.trim().isEmpty ? '$label is required' : null,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body:
           _isLoading
-              ? const Center(child: LoadingIndicator())
+              ? const LoadingIndicator()
               : CustomScrollView(
                 slivers: [
                   SliverAppBar(
@@ -228,7 +306,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                     flexibleSpace: FlexibleSpaceBar(
                       centerTitle: true,
                       title: Text(
-                        'Profile Settings',
+                        'Create Lecturer',
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
@@ -268,80 +346,19 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Update Profile',
+                                  'Create New Lecturer',
                                   style: GoogleFonts.poppins(
                                     fontWeight: FontWeight.bold,
-                                    color: const Color(0xFFFF6949),
+                                    color: Colors.black87,
                                     fontSize: isMobile ? 24 : 28,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Manage your personal information',
+                                  'Fill in the details to create a lecturer account',
                                   style: GoogleFonts.poppins(
                                     color: Colors.grey[600],
                                     fontSize: isMobile ? 14 : 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                Center(
-                                  child: Stack(
-                                    alignment: Alignment.bottomRight,
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 50,
-                                        backgroundImage:
-                                            _profileImageUrl != null
-                                                ? NetworkImage(
-                                                  _profileImageUrl!,
-                                                )
-                                                : null,
-                                        child:
-                                            _profileImageUrl == null
-                                                ? const Icon(
-                                                  Icons.person,
-                                                  size: 50,
-                                                  color: Colors.white,
-                                                )
-                                                : null,
-                                        backgroundColor: const Color(
-                                          0xFFFF6949,
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.all(4.0),
-                                        child: ElevatedButton(
-                                          onPressed:
-                                              _isUploading
-                                                  ? null
-                                                  : _uploadProfileImage,
-                                          style: ElevatedButton.styleFrom(
-                                            padding: const EdgeInsets.all(8),
-                                            shape: const CircleBorder(),
-                                            backgroundColor: const Color(
-                                              0xFFFF6949,
-                                            ),
-                                            elevation: 4,
-                                          ),
-                                          child:
-                                              _isUploading
-                                                  ? const SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          color: Colors.white,
-                                                          strokeWidth: 2,
-                                                        ),
-                                                  )
-                                                  : const Icon(
-                                                    Icons.camera_alt,
-                                                    color: Colors.white,
-                                                    size: 16,
-                                                  ),
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ),
                                 const SizedBox(height: 24),
@@ -349,11 +366,13 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                   controller: _nameController,
                                   label: 'Full Name',
                                   icon: Icons.person,
-                                  validator:
-                                      (value) =>
-                                          value == null || value.trim().isEmpty
-                                              ? 'Please enter a name'
-                                              : null,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _emailController,
+                                  label: 'Email Address',
+                                  icon: Icons.email,
+                                  keyboardType: TextInputType.emailAddress,
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
@@ -361,79 +380,44 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                   label: 'Phone Number',
                                   icon: Icons.phone,
                                   keyboardType: TextInputType.phone,
-                                  validator:
-                                      (value) =>
-                                          value != null &&
-                                                  value.isNotEmpty &&
-                                                  !RegExp(
-                                                    r'^\+?[\d\s-]{10,}$',
-                                                  ).hasMatch(value)
-                                              ? 'Invalid phone number format'
-                                              : null,
-                                ),
-                                const SizedBox(height: 16),
-                                _buildTextField(
-                                  controller: _dobController,
-                                  label: 'Date of Birth (YYYY-MM-DD)',
-                                  icon: Icons.calendar_today,
-                                  readOnly: true,
-                                  onTap: () => _selectDate(context),
-                                  validator:
-                                      (value) =>
-                                          value == null || value.trim().isEmpty
-                                              ? 'Please select a date of birth'
-                                              : !RegExp(
-                                                r'^\d{4}-\d{2}-\d{2}$',
-                                              ).hasMatch(value)
-                                              ? 'Invalid date format (use YYYY-MM-DD)'
-                                              : DateFormat('yyyy-MM-dd')
-                                                  .parseStrict(value)
-                                                  .isAfter(DateTime.now())
-                                              ? 'Date cannot be in the future'
-                                              : null,
-                                ),
-                                const SizedBox(height: 16),
-                                _buildTextField(
-                                  controller: _majorController,
-                                  label: 'Major/Department',
-                                  icon: Icons.school,
-                                  validator:
-                                      (value) =>
-                                          value == null || value.trim().isEmpty
-                                              ? 'Please enter a major/department'
-                                              : null,
-                                ),
-                                const SizedBox(height: 16),
-                                _buildTextField(
-                                  controller: _degreeController,
-                                  label: 'Degree',
-                                  icon: Icons.book,
-                                  validator:
-                                      (value) =>
-                                          value == null || value.trim().isEmpty
-                                              ? 'Please enter a degree'
-                                              : null,
                                 ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<String>(
                                   value: _selectedSex,
                                   decoration: InputDecoration(
                                     labelText: 'Sex',
-                                    prefixIcon: Icon(
+                                    hintText: 'Select Sex',
+                                    hintStyle: GoogleFonts.poppins(
+                                      color: Colors.grey[500],
+                                    ),
+                                    prefixIcon: const Icon(
                                       Icons.person_outline,
-                                      color: const Color(0xFFFF6949),
+                                      color: Color(0xFFFF6949),
                                     ),
                                     filled: true,
                                     fillColor: Colors.white,
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide.none,
                                     ),
-                                    errorMaxLines: 2,
-                                  ),
-                                  hint: Text(
-                                    'Select sex',
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.grey[500],
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[200]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFFF6949),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    errorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: const BorderSide(
+                                        color: Colors.redAccent,
+                                      ),
                                     ),
                                   ),
                                   items:
@@ -441,10 +425,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                           .map(
                                             (sex) => DropdownMenuItem(
                                               value: sex,
-                                              child: Text(
-                                                sex,
-                                                style: GoogleFonts.poppins(),
-                                              ),
+                                              child: Text(sex),
                                             ),
                                           )
                                           .toList(),
@@ -457,56 +438,57 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                               ? 'Please select a sex'
                                               : null,
                                 ),
-                                const SizedBox(height: 24),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: TextButton(
-                                        onPressed: () {
-                                          // Navigator.push(
-                                          //   context,
-                                          //   MaterialPageRoute(
-                                          //     builder:
-                                          //         (context) =>
-                                          //             const ChangePasswordForLecturerPage(),
-                                          //   ),
-                                          // );
-                                        },
-                                        child: Text(
-                                          'Change Password',
-                                          style: GoogleFonts.poppins(
-                                            color: const Color(0xFFFF6949),
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: isMobile ? 14 : 16,
-                                            decoration:
-                                                TextDecoration.underline,
-                                          ),
-                                        ),
-                                      ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _passwordController,
+                                  label: 'Password',
+                                  icon: Icons.lock,
+                                  obscureText: _obscurePassword,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                      color: const Color(0xFFFF6949),
                                     ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: CustomButton(
-                                        text: 'Update Profile',
-                                        onPressed: _updateProfile,
-                                        padding: EdgeInsets.symmetric(
-                                          vertical: isMobile ? 12 : 16,
-                                          horizontal: isMobile ? 24 : 32,
+                                    onPressed:
+                                        () => setState(
+                                          () =>
+                                              _obscurePassword =
+                                                  !_obscurePassword,
                                         ),
-                                        textStyle: GoogleFonts.poppins(
-                                          fontSize: isMobile ? 14 : 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                        elevation: 4,
-                                        borderRadius: 16,
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _adminPasswordController,
+                                  label: 'Your Admin Password',
+                                  icon: Icons.lock_outline,
+                                  obscureText: _obscureAdminPassword,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscureAdminPassword
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                      color: const Color(0xFFFF6949),
+                                    ),
+                                    onPressed:
+                                        () => setState(
+                                          () =>
+                                              _obscureAdminPassword =
+                                                  !_obscureAdminPassword,
+                                        ),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                _isLoading
+                                    ? const LoadingIndicator()
+                                    : Center(
+                                      child: CustomButton(
+                                        text: 'Create Lecturer',
+                                        onPressed: _createLecturer,
+                                      ),
+                                    ),
                               ],
                             ),
                           ),
@@ -516,52 +498,6 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                   ),
                 ],
               ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-    bool readOnly = false,
-    VoidCallback? onTap,
-  }) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFFFF6949)),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey[200]!),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFFF6949), width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.redAccent),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
-        ),
-        labelStyle: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 16),
-        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
-      ),
-      keyboardType: keyboardType,
-      validator: validator,
-      readOnly: readOnly,
-      onTap: onTap,
     );
   }
 }

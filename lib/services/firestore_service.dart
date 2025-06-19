@@ -19,7 +19,6 @@ class FirestoreService {
 
   FirebaseFirestore get db => _db;
 
-  /// Initializes the interactions collection with a sample entry if empty.
   Future<void> initializeInteractionsCollection() async {
     try {
       final interactionsSnapshot =
@@ -38,7 +37,6 @@ class FirestoreService {
     }
   }
 
-  /// Saves a user to Firestore with the specified details.
   Future<void> saveUser(
     String uid,
     String email,
@@ -60,28 +58,42 @@ class FirestoreService {
       if (!['admin', 'lecturer', 'student'].contains(role)) {
         throw Exception('Invalid role: $role');
       }
+
+      // Fetch existing user data
+      final userDoc = await _db.collection('users').doc(uid).get();
+      final existingData = userDoc.exists ? userDoc.data() ?? {} : {};
+
+      // Prepare updated data, preserving existing fields unless new values are provided
+      final updatedData = {
+        'uid': uid,
+        'email': email,
+        'role': role,
+        'username': username ?? existingData['username'],
+        'displayName': displayName ?? existingData['displayName'],
+        'phoneNumber': phoneNumber ?? existingData['phoneNumber'],
+        'address': address ?? existingData['address'],
+        'position': position ?? existingData['position'],
+        'profileImageUrl': profileImageUrl ?? existingData['profileImageUrl'],
+        'userSex': userSex ?? existingData['userSex'],
+        'dateOfBirth': dateOfBirth ?? existingData['dateOfBirth'],
+        'active': active,
+        'createdAt': existingData['createdAt'] ?? FieldValue.serverTimestamp(),
+        'lastActive':
+            existingData['lastActive'] ?? FieldValue.serverTimestamp(),
+        if (passwordUpdatedAt != null) 'passwordUpdatedAt': passwordUpdatedAt,
+      };
+
       await _db.runTransaction((transaction) async {
-        transaction.set(_db.collection('users').doc(uid), {
-          'uid': uid,
-          'email': email,
-          'role': role,
-          'username': username,
-          'displayName': displayName,
-          'phoneNumber': phoneNumber,
-          'address': address,
-          'position': position,
-          'profileImageUrl': profileImageUrl,
-          'userSex': userSex,
-          'dateOfBirth': dateOfBirth,
-          'active': active,
-          'createdAt': FieldValue.serverTimestamp(),
-          'lastActive': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        transaction.set(
+          _db.collection('users').doc(uid),
+          updatedData,
+          SetOptions(merge: true),
+        );
         final interaction = Interaction(
           userId: uid,
-          action: 'create_user',
+          action: 'update_user',
           targetId: uid,
-          details: 'Created user: $email',
+          details: 'Updated user: $email',
           timestamp: Timestamp.now(),
         );
         transaction.set(
@@ -94,7 +106,6 @@ class FirestoreService {
     }
   }
 
-  /// Updates the lastActive timestamp for a user.
   Future<void> updateLastActive(String uid) async {
     try {
       if (uid.isEmpty) throw Exception('UID cannot be empty');
@@ -119,7 +130,6 @@ class FirestoreService {
     }
   }
 
-  /// Marks a user as inactive (soft delete) and logs the interaction.
   Future<void> deleteUser(String uid, String adminUid) async {
     try {
       if (uid.isEmpty) throw Exception('UID cannot be empty');
@@ -152,7 +162,6 @@ class FirestoreService {
     }
   }
 
-  /// Suspends a user by setting their suspended status to true and logs the interaction.
   Future<void> suspendUser(String uid, String adminUid) async {
     try {
       if (uid.isEmpty) throw Exception('User ID cannot be empty');
@@ -183,7 +192,6 @@ class FirestoreService {
     }
   }
 
-  /// Unsuspends a user by setting their suspended status to false and logs the interaction.
   Future<void> unsuspendUser(String uid, String adminUid) async {
     try {
       if (uid.isEmpty) throw Exception('User ID cannot be empty');
@@ -214,7 +222,6 @@ class FirestoreService {
     }
   }
 
-  /// Retrieves a user's data by UID.
   Future<Map<String, dynamic>?> getUser(String uid) async {
     try {
       if (uid.isEmpty) throw Exception('UID cannot be empty');
@@ -226,7 +233,6 @@ class FirestoreService {
     }
   }
 
-  /// Retrieves a paginated list of active users with optional role filtering.
   Future<List<Map<String, dynamic>>> getActiveUsers({
     List<String>? roles,
     int limit = 50,
@@ -255,7 +261,6 @@ class FirestoreService {
     }
   }
 
-  /// Searches users by email prefix and optional role filter.
   Future<List<Map<String, dynamic>>> searchUsersByEmail(
     String emailQuery, {
     List<String>? roles,
@@ -285,9 +290,8 @@ class FirestoreService {
     }
   }
 
-  /// Uploads a file to Cloudinary and returns the secure URL.
   Future<String> uploadToCloudinary(
-    dynamic file, // String for mobile, Uint8List for web
+    dynamic file,
     String type,
     String userId, {
     bool isProfilePic = false,
@@ -302,7 +306,6 @@ class FirestoreService {
       }
       if (userId.isEmpty) throw Exception('User ID cannot be empty');
 
-      // Validate file type based on platform
       if (!kIsWeb && file is! String) {
         throw Exception('File must be a path on mobile');
       }
@@ -310,7 +313,6 @@ class FirestoreService {
         throw Exception('File must be bytes on web');
       }
 
-      // Validate file path on non-web platforms
       if (!kIsWeb && file is String) {
         final filePath = file as String;
         if (filePath.isEmpty || !await File(filePath).exists()) {
@@ -326,7 +328,6 @@ class FirestoreService {
         }
       }
 
-      // Define folder structure
       String folderPath = 'hybridlms';
       if (isProfilePic) {
         folderPath += '/users/$userId/profile';
@@ -338,7 +339,6 @@ class FirestoreService {
         folderPath += '/users/$userId/uploads/$type';
       }
 
-      // Generate unique public ID
       final publicId = '${userId}_${DateTime.now().millisecondsSinceEpoch}';
 
       CloudinaryResponse response;
@@ -379,7 +379,6 @@ class FirestoreService {
         throw Exception('Failed to upload file to Cloudinary');
       }
 
-      // Log the interaction
       final interaction = Interaction(
         userId: userId,
         action:
@@ -400,9 +399,8 @@ class FirestoreService {
     }
   }
 
-  /// Uploads a profile picture for a user and updates the user document.
   Future<void> uploadProfilePicture(
-    dynamic file, // String for mobile, Uint8List for web
+    dynamic file,
     String userId,
     String adminUid,
   ) async {
@@ -446,7 +444,6 @@ class FirestoreService {
     }
   }
 
-  /// Uploads a course thumbnail to Cloudinary and returns the secure URL.
   Future<String> uploadCourseThumbnail(
     dynamic file,
     String courseId,
@@ -470,7 +467,6 @@ class FirestoreService {
     }
   }
 
-  /// Logs an interaction to the interactions collection.
   Future<void> logInteraction(Interaction interaction) async {
     try {
       if (interaction.userId.isEmpty) {
@@ -485,7 +481,6 @@ class FirestoreService {
     }
   }
 
-  /// Retrieves interactions for a user, skipping malformed documents, and fetches user names.
   Future<List<Interaction>> getInteractions(String userId) async {
     try {
       if (userId.isEmpty) throw Exception('User ID cannot be empty');
@@ -555,7 +550,6 @@ class FirestoreService {
     }
   }
 
-  /// Initializes Firestore with sample data (optional, for testing).
   Future<void> initializeCollections({bool force = false}) async {
     if (!force) return;
     try {
@@ -565,7 +559,6 @@ class FirestoreService {
     }
   }
 
-  /// Creates or updates a course in Firestore with modules and lesson content.
   Future<void> saveCourse(String lecturerId, Course course) async {
     try {
       if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
@@ -574,7 +567,6 @@ class FirestoreService {
         throw Exception('Course category cannot be empty if provided');
       }
 
-      // Perform all reads outside the transaction
       final courseDoc = await _db.collection('courses').doc(course.id).get();
       final previousCategory =
           courseDoc.exists && courseDoc.data() != null
@@ -607,7 +599,6 @@ class FirestoreService {
     }
   }
 
-  /// Saves modules and lessons as subcollections in Firestore.
   Future<void> saveCourseSubcollections(
     String courseId,
     List<Map<String, dynamic>> modules,
@@ -615,7 +606,6 @@ class FirestoreService {
     try {
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
 
-      // Perform all reads outside the transaction
       final existingModulesSnapshot =
           await _db
               .collection('courses')
@@ -641,21 +631,7 @@ class FirestoreService {
       }
 
       await _db.runTransaction((transaction) async {
-        // Perform all writes after reads
-        final newModuleIds =
-            modules.map((module) => module['id'] as String).toSet();
-
-        // Delete modules that are no longer present
-        for (var moduleId in existingModuleIds.difference(newModuleIds)) {
-          transaction.delete(
-            _db
-                .collection('courses')
-                .doc(courseId)
-                .collection('modules')
-                .doc(moduleId),
-          );
-        }
-
+        // Update or create new modules
         for (var module in modules) {
           final moduleId = module['id'] ?? const Uuid().v4();
           transaction.set(
@@ -679,19 +655,7 @@ class FirestoreService {
                   .toSet() ??
               {};
 
-          // Delete lessons that are no longer present
-          for (var lessonId in existingLessonIds.difference(newLessonIds)) {
-            transaction.delete(
-              _db
-                  .collection('courses')
-                  .doc(courseId)
-                  .collection('modules')
-                  .doc(moduleId)
-                  .collection('lessons')
-                  .doc(lessonId),
-            );
-          }
-
+          // Update existing lessons or add new ones
           for (var lesson in module['lessons'] ?? []) {
             final lessonId = lesson['id'] ?? const Uuid().v4();
             transaction.set(
@@ -714,6 +678,32 @@ class FirestoreService {
               SetOptions(merge: true),
             );
           }
+
+          // Remove lessons that are no longer in the updated data
+          for (var lessonId in existingLessonIds.difference(newLessonIds)) {
+            transaction.delete(
+              _db
+                  .collection('courses')
+                  .doc(courseId)
+                  .collection('modules')
+                  .doc(moduleId)
+                  .collection('lessons')
+                  .doc(lessonId),
+            );
+          }
+        }
+
+        // Remove modules that are no longer in the updated data
+        final newModuleIds =
+            modules.map((module) => module['id'] as String).toSet();
+        for (var moduleId in existingModuleIds.difference(newModuleIds)) {
+          transaction.delete(
+            _db
+                .collection('courses')
+                .doc(courseId)
+                .collection('modules')
+                .doc(moduleId),
+          );
         }
       });
     } catch (e) {
@@ -721,7 +711,6 @@ class FirestoreService {
     }
   }
 
-  /// Publishes a course by setting its published status to true.
   Future<void> publishCourse(String courseId, String lecturerId) async {
     try {
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
@@ -756,7 +745,6 @@ class FirestoreService {
     }
   }
 
-  /// Disables a course by setting its published status to false.
   Future<void> disableCourse(String courseId, String lecturerId) async {
     try {
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
@@ -790,7 +778,6 @@ class FirestoreService {
     }
   }
 
-  /// Deletes a course and logs the interaction.
   Future<void> deleteCourse(String courseId, String lecturerId) async {
     try {
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
@@ -822,7 +809,6 @@ class FirestoreService {
     }
   }
 
-  /// Retrieves a course by ID with modules and lessons.
   Future<Course?> getCourse(String courseId) async {
     try {
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
@@ -832,7 +818,6 @@ class FirestoreService {
 
       final courseData = data as Map<String, dynamic>;
 
-      // Fetch modules and lessons from subcollections
       final modulesSnapshot =
           await _db
               .collection('courses')
@@ -879,7 +864,6 @@ class FirestoreService {
     }
   }
 
-  /// Retrieves all courses for a lecturer with optional category filter.
   Future<List<Course>> getLecturerCourses(
     String lecturerId, {
     String? category,
@@ -918,19 +902,21 @@ class FirestoreService {
                   .collection('lessons')
                   .get();
           final lessons =
-              lessonsSnapshot.docs.map((lessonDoc) {
-                final lessonData = lessonDoc.data() as Map<String, dynamic>;
-                return {
-                  'id': lessonData['id'] ?? const Uuid().v4(),
-                  'name': lessonData['name'] ?? '',
-                  'text': lessonData['text'] ?? '',
-                  'documents': lessonData['documents'] ?? [],
-                  'videos': lessonData['videos'] ?? [],
-                  'images': lessonData['images'] ?? [],
-                  'createdAt':
-                      lessonData['createdAt'] ?? FieldValue.serverTimestamp(),
-                };
-              }).toList();
+              lessonsSnapshot.docs
+                  .map(
+                    (lessonDoc) => ({
+                      'id': lessonDoc.id ?? const Uuid().v4(),
+                      'name': lessonDoc['name'] ?? '',
+                      'text': lessonDoc['text'] ?? '',
+                      'documents': lessonDoc['documents'] ?? [],
+                      'videos': lessonDoc['videos'] ?? [],
+                      'images': lessonDoc['images'] ?? [],
+                      'createdAt':
+                          lessonDoc['createdAt'] ??
+                          FieldValue.serverTimestamp(),
+                    }),
+                  )
+                  .toList();
           modules.add({
             'id': moduleData['id'],
             'name': moduleData['name'],
@@ -948,7 +934,6 @@ class FirestoreService {
     }
   }
 
-  /// Enrolls a student in a course.
   Future<void> enrollStudent(String courseId, String studentId) async {
     try {
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
@@ -989,7 +974,6 @@ class FirestoreService {
     }
   }
 
-  /// Retrieves enrolled students for a course.
   Future<List<Map<String, dynamic>>> getEnrolledStudents(
     String courseId,
   ) async {
@@ -1013,7 +997,6 @@ class FirestoreService {
     }
   }
 
-  /// Updates an existing course with new details and modules.
   Future<void> updateCourse(String lecturerId, Course course) async {
     try {
       if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
@@ -1023,32 +1006,54 @@ class FirestoreService {
         throw Exception('Course category cannot be empty if provided');
       }
 
-      // Perform all reads outside the transaction
       final courseDoc = await _db.collection('courses').doc(course.id).get();
       if (!courseDoc.exists) throw Exception('Course not found: ${course.id}');
-      final courseData = courseDoc.data();
-      if (courseData == null) throw Exception('Course data is null');
-      if (courseData['lecturerId'] != lecturerId) {
+      final existingData = courseDoc.data() as Map<String, dynamic>? ?? {};
+      if (existingData['lecturerId'] != lecturerId) {
         throw Exception('Unauthorized: Not the course lecturer');
       }
-      final previousCategory = courseData['category'] as String?;
-      final previousPublished = courseData['isPublished'] as bool?;
-      final previousThumbnailUrl = courseData['thumbnailUrl'] as String?;
+
+      // Fetch existing values to preserve if not updated
+      final previousCategory = existingData['category'] as String?;
+      final previousPublished = existingData['isPublished'] as bool? ?? false;
+      final previousThumbnailUrl = existingData['thumbnailUrl'] as String?;
+      final previousModules = existingData['modules'] as List<dynamic>?;
+      final previousContentUrls =
+          existingData['contentUrls'] as List<dynamic>? ?? [];
+      final previousEnrolledCount = existingData['enrolledCount'] as int? ?? 0;
+
+      // Prepare updated data, preserving unchanged fields
+      final updatedData = course.toMap();
+      updatedData['lastModifiedAt'] = FieldValue.serverTimestamp();
+      if (course.modules == null) updatedData['modules'] = previousModules;
+      if (course.contentUrls.isEmpty)
+        updatedData['contentUrls'] = previousContentUrls;
+      if (course.enrolledCount == 0)
+        updatedData['enrolledCount'] = previousEnrolledCount;
+
+      final changes = <String>[];
+      if (previousCategory != course.category) {
+        changes.add(
+          'Category changed from $previousCategory to ${course.category}',
+        );
+      }
+      if (course.isPublished != previousPublished) {
+        changes.add(
+          'Publish status changed to ${course.isPublished ? 'Published' : 'Draft'}',
+        );
+      }
+      if (course.thumbnailUrl != previousThumbnailUrl &&
+          course.thumbnailUrl != null) {
+        changes.add('Thumbnail updated');
+      }
 
       await _db.runTransaction((transaction) async {
-        // Update course data
-        final courseDataToUpdate = course.toMap();
-        courseDataToUpdate['lastModifiedAt'] = FieldValue.serverTimestamp();
-        if (course.thumbnailUrl != null &&
-            course.thumbnailUrl != previousThumbnailUrl) {
-          courseDataToUpdate['thumbnailUrl'] = course.thumbnailUrl;
-        }
-        transaction.update(
+        transaction.set(
           _db.collection('courses').doc(course.id),
-          courseDataToUpdate,
+          updatedData,
+          SetOptions(merge: true),
         );
 
-        // Handle publish status change
         if (course.isPublished != previousPublished) {
           transaction.update(_db.collection('courses').doc(course.id), {
             'isPublished': course.isPublished,
@@ -1056,25 +1061,13 @@ class FirestoreService {
           });
         }
 
-        // Save or update subcollections with uploaded files
-        await saveCourseSubcollections(course.id, course.modules ?? []);
-
-        // Log the interaction
         final interaction = Interaction(
           userId: lecturerId,
           action: 'update_course',
           targetId: course.id,
           details:
               'Updated course: ${course.title}' +
-              (previousCategory != course.category
-                  ? ' (Category changed from $previousCategory to ${course.category})'
-                  : '') +
-              (course.isPublished != previousPublished
-                  ? ' (Publish status changed to ${course.isPublished ? 'Published' : 'Draft'})'
-                  : '') +
-              (course.thumbnailUrl != previousThumbnailUrl
-                  ? ' (Thumbnail updated)'
-                  : ''),
+              (changes.isNotEmpty ? ' (${changes.join(', ')})' : ''),
           timestamp: Timestamp.now(),
         );
         transaction.set(
@@ -1082,6 +1075,11 @@ class FirestoreService {
           interaction.toMap(),
         );
       });
+
+      // Update subcollections only if modules are provided
+      if (course.modules != null) {
+        await saveCourseSubcollections(course.id, course.modules!);
+      }
     } catch (e) {
       throw Exception('Failed to update course: $e');
     }

@@ -39,8 +39,16 @@ class _ChangePasswordForLecturerPageState
       );
       await currentUser.reauthenticateWithCredential(credential);
 
+      // Validate new password matches confirmation
+      if (_newPasswordController.text.trim() !=
+          _confirmPasswordController.text.trim()) {
+        throw Exception('New password and confirmation do not match');
+      }
+
       // Update password
       await currentUser.updatePassword(_newPasswordController.text.trim());
+
+      // Update only the passwordUpdatedAt timestamp in Firestore
       await _firestoreService.saveUser(
         currentUser.uid,
         currentUser.email!,
@@ -48,22 +56,70 @@ class _ChangePasswordForLecturerPageState
         passwordUpdatedAt: DateTime.now(),
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password changed successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  'Password updated successfully!',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF4CAF50), // Green for success
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            duration: const Duration(seconds: 2),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+        );
+        Navigator.pop(context); // Return to previous page
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to change password: $e'),
-          backgroundColor: const Color.fromARGB(255, 255, 0, 0),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    e.toString().contains('match')
+                        ? 'New password and confirmation do not match. Please try again.'
+                        : 'Failed to update password. Please check your current password and try again.',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFFF6949), // Orange from app theme
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            duration: const Duration(seconds: 3),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -200,7 +256,7 @@ class _ChangePasswordForLecturerPageState
                                   ),
                                   textStyle: GoogleFonts.poppins(
                                     fontSize: isMobile ? 14 : 16,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w500,
                                     color: Colors.white,
                                   ),
                                   elevation: 4,

@@ -1,6 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/animation.dart';
+import 'package:hybridlms/pages/admin/create_admin_page.dart';
+import 'package:hybridlms/pages/admin/create_lecturer_page.dart';
+import 'package:hybridlms/pages/admin/user_management_page.dart';
 import 'package:hybridlms/pages/lecturer/change_password_for_lecturer_page.dart';
 import 'package:hybridlms/pages/lecturer/content_viewer_page.dart';
 import 'package:hybridlms/pages/lecturer/course_editor.dart';
@@ -8,7 +11,6 @@ import 'package:hybridlms/pages/lecturer/course_management_page.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_dashboard.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_settings_page.dart';
 import 'package:hybridlms/pages/lecturer/update_course_page.dart';
-import 'package:hybridlms/pages/student/lecturers_page.dart';
 import 'package:hybridlms/routes.dart';
 import 'package:hybridlms/theme.dart';
 import 'package:hybridlms/pages/signup_page.dart';
@@ -54,8 +56,16 @@ class MyApp extends StatelessWidget {
           Routes.adminDashboard:
               (context) =>
                   const FadeTransitionPage(child: AdminDashboardPage()),
+          Routes.createAdmin:
+              (context) => const FadeTransitionPage(child: CreateAdminPage()),
+          Routes.createLecturer:
+              (context) =>
+                  const FadeTransitionPage(child: CreateLecturerPage()),
           Routes.lecturerDashboard:
               (context) => const FadeTransitionPage(child: LecturerDashboard()),
+          Routes.userManagement:
+              (context) =>
+                  const FadeTransitionPage(child: UserManagementPage()),
           Routes.courseManagement:
               (context) =>
                   const FadeTransitionPage(child: CourseManagementPage()),

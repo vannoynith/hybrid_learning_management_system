@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,8 +13,9 @@ import 'dart:typed_data';
 
 class CourseEditor extends StatefulWidget {
   final Course? course;
+  final Function(Course)? onSave; // Callback for saving/updating
 
-  const CourseEditor({super.key, this.course});
+  const CourseEditor({super.key, this.course, this.onSave});
 
   @override
   _CourseEditorState createState() => _CourseEditorState();
@@ -224,6 +226,7 @@ class _CourseEditorState extends State<CourseEditor>
         'image',
         userId,
         isThumbnail: true,
+        courseId: widget.course?.id ?? const Uuid().v4(),
       );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -355,10 +358,6 @@ class _CourseEditorState extends State<CourseEditor>
     setState(() => _isLoading = true);
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final firestoreService = Provider.of<FirestoreService>(
-        context,
-        listen: false,
-      );
       final user = authService.getCurrentUser();
       if (user == null) throw Exception('User not logged in');
 
@@ -445,7 +444,7 @@ class _CourseEditorState extends State<CourseEditor>
         description: _descriptionController.text.trim(),
         lecturerId: user.uid,
         isPublished: _isPublished,
-        createdAt: widget.course?.createdAt,
+        createdAt: widget.course?.createdAt, // Preserve original creation date
         thumbnailUrl: thumbnailUrl,
         modules: processedModules,
         contentUrls:
@@ -459,22 +458,30 @@ class _CourseEditorState extends State<CourseEditor>
                   ],
                 )
                 .toList(),
-        enrolledCount: widget.course?.enrolledCount ?? 0,
+        enrolledCount:
+            widget.course?.enrolledCount ?? 0, // Preserve enrolled count
         category: _selectedCategory,
       );
 
-      await firestoreService.saveCourse(user.uid, course);
-
-      if (_isPublished && !(widget.course?.isPublished ?? false)) {
-        await firestoreService.publishCourse(course.id, user.uid);
-      } else if (!_isPublished && (widget.course?.isPublished ?? false)) {
-        await firestoreService.disableCourse(course.id, user.uid);
+      if (widget.onSave != null && widget.course != null) {
+        await widget.onSave!(course); // Use callback for update
+      } else {
+        final firestoreService = Provider.of<FirestoreService>(
+          context,
+          listen: false,
+        );
+        await firestoreService.saveCourse(
+          user.uid,
+          course,
+        ); // Create new course
+        if (_isPublished) {
+          await firestoreService.publishCourse(course.id, user.uid);
+        }
+        await firestoreService.saveCourseSubcollections(
+          courseId,
+          processedModules,
+        );
       }
-
-      await firestoreService.saveCourseSubcollections(
-        courseId,
-        processedModules,
-      );
 
       if (mounted) {
         _snackbarAnimationController.forward();
@@ -1149,29 +1156,44 @@ class _CourseEditorState extends State<CourseEditor>
                                           ),
                                           child: Image.network(
                                             _selectedThumbnail != null
-                                                ? 'https://via.placeholder.com/150'
+                                                ? 'data:image/png;base64,${base64Encode(_selectedThumbnail!.bytes!)}'
                                                 : widget.course!.thumbnailUrl!,
-                                            height: 150,
-                                            width: double.infinity,
+                                            width: 150,
+                                            height: 100,
                                             fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    const Icon(
-                                                      Icons.error,
-                                                      size: 50,
+                                            errorBuilder: (
+                                              context,
+                                              error,
+                                              stackTrace,
+                                            ) {
+                                              return Container(
+                                                width: 150,
+                                                height: 100,
+                                                color: Colors.grey[300],
+                                                child: const Center(
+                                                  child: Text(
+                                                    'Image failed to load',
+                                                    style: TextStyle(
+                                                      color: Colors.black54,
                                                     ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           ),
                                         ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.close,
-                                            color: Colors.redAccent,
-                                          ),
-                                          onPressed:
-                                              () => setState(
+                                        if (_selectedThumbnail != null)
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.redAccent,
+                                            ),
+                                            onPressed: () {
+                                              setState(
                                                 () => _selectedThumbnail = null,
-                                              ),
-                                        ),
+                                              );
+                                            },
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -1183,14 +1205,10 @@ class _CourseEditorState extends State<CourseEditor>
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const Divider(height: 24),
-                                ..._modules
-                                    .asMap()
-                                    .entries
-                                    .map(
-                                      (entry) => _buildModuleSection(entry.key),
-                                    )
-                                    .toList(),
+                                const SizedBox(height: 12),
+                                ..._modules.asMap().entries.map(
+                                  (entry) => _buildModuleSection(entry.key),
+                                ),
                                 const SizedBox(height: 16),
                                 _buildModernButton(
                                   label: 'Add Module',
@@ -1198,68 +1216,6 @@ class _CourseEditorState extends State<CourseEditor>
                                   onPressed: _addModule,
                                 ),
                                 const SizedBox(height: 24),
-                                Text(
-                                  'Publish Settings',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const Divider(height: 24),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.grey.withOpacity(0.1),
-                                        spreadRadius: 2,
-                                        blurRadius: 5,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                    title: Text(
-                                      'Publish Course',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.grey[700],
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      'Make this course available to students',
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.grey[500],
-                                      ),
-                                    ),
-                                    trailing: Transform.scale(
-                                      scale: 1.2,
-                                      child: Switch(
-                                        value: _isPublished,
-                                        onChanged:
-                                            (value) => setState(
-                                              () => _isPublished = value,
-                                            ),
-                                        activeColor: const Color(0xFFFF6949),
-                                        activeTrackColor: const Color(
-                                          0xFFFF8A65,
-                                        ).withOpacity(0.5),
-                                        inactiveThumbColor: Colors.grey[400],
-                                        inactiveTrackColor: Colors.grey[200],
-                                      ),
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 32),
                                 _buildModernButton(
                                   label: 'Save Course',
                                   icon: Icons.save,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:hybridlms/models/course.dart';
 import 'package:hybridlms/routes.dart';
 import 'package:hybridlms/services/auth_service.dart';
@@ -283,286 +284,281 @@ class _CourseManagementPageState extends State<CourseManagementPage> {
     final filteredCourses = _filteredCourses();
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
-    final isTablet = screenWidth >= 600 && screenWidth < 900;
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: Text(
-          'Manage Courses',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: isMobile ? 18 : 22,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: const Color(0xFFFF6949),
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFFFF6949), Color(0xFFFF8A65)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-      ),
+      backgroundColor: Colors.grey[50],
       body:
           _isLoading || _isProcessing
               ? const Center(child: LoadingIndicator())
-              : RefreshIndicator(
-                onRefresh: _loadCourses,
-                color: const Color(0xFFFF6949),
-                backgroundColor: Colors.white,
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.all(isMobile ? 12 : 20),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: isMobile ? double.infinity : 1200,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16.0),
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: InputDecoration(
-                              hintText: 'Search courses by title...',
-                              prefixIcon: const Icon(
-                                Icons.search,
-                                color: Color(0xFFFF6949),
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: Colors.grey[300]!,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFFFF6949),
-                                  width: 2,
-                                ),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 12.0,
-                              ),
-                            ),
-                            style: TextStyle(fontSize: isMobile ? 14 : 16),
+              : CustomScrollView(
+                slivers: [
+                  SliverAppBar(
+                    expandedHeight: 200,
+                    floating: false,
+                    pinned: true,
+                    toolbarHeight: 60,
+                    titleSpacing: 0,
+                    flexibleSpace: FlexibleSpaceBar(
+                      centerTitle: true,
+                      title: Text(
+                        'Manage Courses',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          fontSize: isMobile ? 18 : 22,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      background: Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFFFF6949), Color(0xFFFF8A65)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
                         ),
-                        Card(
-                          elevation: 3,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFFF6949),
+                    elevation: 0,
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 16 : 24,
+                        vertical: 16,
+                      ),
+                      child: Card(
+                        elevation: 8,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Container(
+                          padding: EdgeInsets.all(isMobile ? 12 : 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
                           ),
-                          child: Container(
-                            padding: EdgeInsets.all(isMobile ? 12 : 20),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Courses: ${filteredCourses.length}',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: isMobile ? 16 : 20,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Courses: ${filteredCourses.length}',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                  fontSize: isMobile ? 16 : 20,
                                 ),
-                                const SizedBox(height: 12),
-                                if (filteredCourses.isEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 12),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: TextField(
+                                  controller: _searchController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Search courses by title...',
+                                    prefixIcon: const Icon(
+                                      Icons.search,
+                                      color: Color(0xFFFF6949),
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey[300]!,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFFF6949),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(
                                       vertical: 12.0,
                                     ),
-                                    child: Text(
-                                      'No courses found.',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.bodyMedium?.copyWith(
-                                        fontSize: isMobile ? 12 : 14,
-                                        color: Colors.grey[600],
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: isMobile ? 14 : 16,
+                                  ),
+                                ),
+                              ),
+                              if (filteredCourses.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12.0,
+                                  ),
+                                  child: Text(
+                                    'No courses found.',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: isMobile ? 12 : 14,
+                                      color: Colors.grey[600],
                                     ),
-                                  )
-                                else
-                                  ...filteredCourses.map(
-                                    (course) => Card(
-                                      elevation: 1,
-                                      margin: const EdgeInsets.only(bottom: 10),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                )
+                              else
+                                ...filteredCourses.map(
+                                  (course) => Card(
+                                    elevation: 1,
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: ListTile(
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: isMobile ? 10 : 14,
+                                        vertical: 6,
                                       ),
-                                      child: ListTile(
-                                        contentPadding: EdgeInsets.symmetric(
-                                          horizontal: isMobile ? 10 : 14,
-                                          vertical: 6,
+                                      leading: CircleAvatar(
+                                        radius: isMobile ? 18 : 22,
+                                        backgroundColor: const Color(
+                                          0xFFFF6949,
                                         ),
-                                        leading: CircleAvatar(
-                                          radius: isMobile ? 18 : 22,
-                                          backgroundColor: const Color(
-                                            0xFFFF6949,
-                                          ),
-                                          child: Text(
-                                            course.title.isNotEmpty
-                                                ? course.title[0].toUpperCase()
-                                                : '?',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: isMobile ? 12 : 14,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                        title: Text(
-                                          course.title,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.titleMedium?.copyWith(
+                                        child: Text(
+                                          course.title.isNotEmpty
+                                              ? course.title[0].toUpperCase()
+                                              : '?',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: isMobile ? 12 : 14,
                                             fontWeight: FontWeight.bold,
-                                            color: Colors.black87,
-                                            fontSize: isMobile ? 14 : 16,
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        subtitle: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Status: ${course.isPublished ? 'Published' : 'Draft'}',
-                                              style: TextStyle(
-                                                color:
-                                                    course.isPublished
-                                                        ? Colors.green[700]
-                                                        : Colors.grey[600],
-                                                fontSize: isMobile ? 10 : 12,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            Text(
-                                              'Enrollments: ${course.enrolledCount}',
-                                              style: TextStyle(
-                                                color: Colors.grey[600],
-                                                fontSize: isMobile ? 10 : 12,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
+                                      ),
+                                      title: Text(
+                                        course.title,
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                          fontSize: isMobile ? 14 : 16,
                                         ),
-                                        trailing: Wrap(
-                                          spacing: 4,
-                                          children: [
-                                            IconButton(
-                                              icon: Icon(
-                                                course.isPublished
-                                                    ? Icons.pause
-                                                    : Icons.play_arrow,
-                                                color:
-                                                    course.isPublished
-                                                        ? Colors.orange
-                                                        : Colors.green,
-                                                size: isMobile ? 20 : 24,
-                                              ),
-                                              tooltip:
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Status: ${course.isPublished ? 'Published' : 'Draft'}',
+                                            style: TextStyle(
+                                              color:
                                                   course.isPublished
-                                                      ? 'Disable'
-                                                      : 'Publish',
-                                              onPressed:
-                                                  _isProcessing
-                                                      ? null
-                                                      : () =>
-                                                          course.isPublished
-                                                              ? _disableCourse(
-                                                                course.id,
-                                                              )
-                                                              : _publishCourse(
-                                                                course.id,
-                                                              ),
+                                                      ? Colors.green[700]
+                                                      : Colors.grey[600],
+                                              fontSize: isMobile ? 10 : 12,
                                             ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.edit,
-                                                color: Color(0xFFFF6949),
-                                              ),
-                                              tooltip: 'Edit',
-                                              onPressed:
-                                                  _isProcessing
-                                                      ? null
-                                                      : () =>
-                                                          Navigator.pushNamed(
-                                                            context,
-                                                            Routes.updateCourse,
-                                                            arguments: course,
-                                                          ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            'Enrollments: ${course.enrolledCount}',
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: isMobile ? 10 : 12,
                                             ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.delete,
-                                                color: Color(0xFFEF4444),
-                                              ),
-                                              tooltip: 'Delete',
-                                              onPressed:
-                                                  _isProcessing
-                                                      ? null
-                                                      : () => _deleteCourse(
-                                                        course.id,
-                                                      ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                      trailing: Wrap(
+                                        spacing: 4,
+                                        children: [
+                                          IconButton(
+                                            icon: Icon(
+                                              course.isPublished
+                                                  ? Icons.pause
+                                                  : Icons.play_arrow,
+                                              color:
+                                                  course.isPublished
+                                                      ? Colors.orange
+                                                      : Colors.green,
+                                              size: isMobile ? 20 : 24,
                                             ),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.visibility,
-                                                color: Color(0xFFFF6949),
-                                              ),
-                                              tooltip: 'View Content',
-                                              onPressed:
-                                                  _isProcessing
-                                                      ? null
-                                                      : () =>
-                                                          Navigator.pushNamed(
-                                                            context,
-                                                            Routes
-                                                                .contentViewPage,
-                                                            arguments: course,
-                                                          ),
+                                            tooltip:
+                                                course.isPublished
+                                                    ? 'Disable'
+                                                    : 'Publish',
+                                            onPressed:
+                                                _isProcessing
+                                                    ? null
+                                                    : () =>
+                                                        course.isPublished
+                                                            ? _disableCourse(
+                                                              course.id,
+                                                            )
+                                                            : _publishCourse(
+                                                              course.id,
+                                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.edit,
+                                              color: Color(0xFFFF6949),
                                             ),
-                                          ],
-                                        ),
+                                            tooltip: 'Edit',
+                                            onPressed:
+                                                _isProcessing
+                                                    ? null
+                                                    : () => Navigator.pushNamed(
+                                                      context,
+                                                      Routes.updateCourse,
+                                                      arguments: course.id,
+                                                    ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.delete,
+                                              color: Color(0xFFEF4444),
+                                            ),
+                                            tooltip: 'Delete',
+                                            onPressed:
+                                                _isProcessing
+                                                    ? null
+                                                    : () => _deleteCourse(
+                                                      course.id,
+                                                    ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.visibility,
+                                              color: Color(0xFFFF6949),
+                                            ),
+                                            tooltip: 'View Content',
+                                            onPressed:
+                                                _isProcessing
+                                                    ? null
+                                                    : () => Navigator.pushNamed(
+                                                      context,
+                                                      Routes.contentViewPage,
+                                                      arguments: course,
+                                                    ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
-                              ],
-                            ),
+                                ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
     );
   }
