@@ -506,7 +506,7 @@ class FirestoreService {
               final adminData = adminDoc.data();
               adminName =
                   adminData != null
-                      ? adminData['email']?.split('@')[0] ?? 'Unknown Admin'
+                      ? adminData['email'] ?? 'Unknown Admin'
                       : 'Unknown Admin';
             }
 
@@ -518,7 +518,7 @@ class FirestoreService {
                 final targetData = targetDoc.data();
                 targetName =
                     targetData != null
-                        ? targetData['email']?.split('@')[0] ?? 'Unknown User'
+                        ? targetData['email'] ?? 'Unknown User'
                         : 'Unknown User';
               }
             }
@@ -1082,6 +1082,35 @@ class FirestoreService {
       }
     } catch (e) {
       throw Exception('Failed to update course: $e');
+    }
+  }
+
+  Future<String> uploadLessonContent(
+    dynamic file,
+    String type,
+    String courseId,
+    String moduleId,
+    String lecturerId,
+  ) async {
+    try {
+      if (file == null) throw Exception('File cannot be null');
+      if (!['image', 'pdf', 'video', 'doc'].contains(type)) {
+        throw Exception('Invalid content type: $type');
+      }
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (moduleId.isEmpty) throw Exception('Module ID cannot be empty');
+      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+
+      final url = await uploadToCloudinary(
+        file,
+        type,
+        lecturerId,
+        courseId: courseId,
+        moduleId: moduleId,
+      );
+      return url;
+    } catch (e) {
+      throw Exception('Failed to upload lesson content: $e');
     }
   }
 }

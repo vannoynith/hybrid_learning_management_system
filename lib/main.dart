@@ -1,6 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/animation.dart';
+import 'package:hybridlms/pages/admin/admin_settings_page.dart';
+import 'package:hybridlms/pages/admin/change_password_for_admin_page.dart';
 import 'package:hybridlms/pages/admin/create_admin_page.dart';
 import 'package:hybridlms/pages/admin/create_lecturer_page.dart';
 import 'package:hybridlms/pages/admin/user_management_page.dart';
@@ -8,6 +10,7 @@ import 'package:hybridlms/pages/lecturer/change_password_for_lecturer_page.dart'
 import 'package:hybridlms/pages/lecturer/content_viewer_page.dart';
 import 'package:hybridlms/pages/lecturer/course_editor.dart';
 import 'package:hybridlms/pages/lecturer/course_management_page.dart';
+import 'package:hybridlms/pages/lecturer/file_preview_page.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_dashboard.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_settings_page.dart';
 import 'package:hybridlms/pages/lecturer/update_course_page.dart';
@@ -44,6 +47,7 @@ class MyApp extends StatelessWidget {
         theme: appTheme(),
         initialRoute: Routes.login,
         routes: {
+          //login and signup
           Routes.login:
               (context) => const FadeTransitionPage(child: LoginPage()),
           Routes.signup:
@@ -53,6 +57,8 @@ class MyApp extends StatelessWidget {
           Routes.assignment:
               (context) => const FadeTransitionPage(child: AssignmentPage()),
           Routes.chat: (context) => const FadeTransitionPage(child: ChatPage()),
+
+          //admin
           Routes.adminDashboard:
               (context) =>
                   const FadeTransitionPage(child: AdminDashboardPage()),
@@ -61,11 +67,18 @@ class MyApp extends StatelessWidget {
           Routes.createLecturer:
               (context) =>
                   const FadeTransitionPage(child: CreateLecturerPage()),
-          Routes.lecturerDashboard:
-              (context) => const FadeTransitionPage(child: LecturerDashboard()),
           Routes.userManagement:
               (context) =>
                   const FadeTransitionPage(child: UserManagementPage()),
+          Routes.adminSetting:
+              (context) => const FadeTransitionPage(child: AdminSettingsPage()),
+          Routes.changePasswordForAdmin:
+              (context) =>
+                  const FadeTransitionPage(child: ChangePasswordForAdminPage()),
+
+          //lecturer
+          Routes.lecturerDashboard:
+              (context) => const FadeTransitionPage(child: LecturerDashboard()),
           Routes.courseManagement:
               (context) =>
                   const FadeTransitionPage(child: CourseManagementPage()),
@@ -74,8 +87,9 @@ class MyApp extends StatelessWidget {
           Routes.courseEditor:
               (context) => const FadeTransitionPage(child: CourseEditor()),
           Routes.updateCourse:
-              (context) =>
-                  FadeTransitionPage(child: UpdateCoursePage(courseId: '')),
+              (context) => UpdateCoursePage(
+                courseId: ModalRoute.of(context)!.settings.arguments as String,
+              ),
           Routes.lecturerSettingsPage:
               (context) =>
                   const FadeTransitionPage(child: LecturerSettingsPage()),
@@ -83,6 +97,8 @@ class MyApp extends StatelessWidget {
               (context) => const FadeTransitionPage(
                 child: ChangePasswordForLecturerPage(),
               ),
+          Routes.filePreviewPage:
+              (context) => const FadeTransitionPage(child: FilePreviewPage()),
         },
       ),
     );

@@ -7,23 +7,23 @@ import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/custom_button.dart';
-import 'change_password_for_lecturer_page.dart';
+import 'change_password_for_admin_page.dart';
 
-class LecturerSettingsPage extends StatefulWidget {
-  const LecturerSettingsPage({super.key});
+class AdminSettingsPage extends StatefulWidget {
+  const AdminSettingsPage({super.key});
 
   @override
-  State<LecturerSettingsPage> createState() => _LecturerSettingsPageState();
+  State<AdminSettingsPage> createState() => _AdminSettingsPageState();
 }
 
-class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
+class _AdminSettingsPageState extends State<AdminSettingsPage> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _majorController = TextEditingController();
-  final TextEditingController _degreeController = TextEditingController();
+  final TextEditingController _departmentController = TextEditingController();
+  final TextEditingController _positionController = TextEditingController();
   final TextEditingController _dobController = TextEditingController();
   String? _profileImageUrl;
   String? _selectedSex;
@@ -47,8 +47,8 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
       if (_userData != null) {
         _nameController.text = _userData!['displayName'] ?? '';
         _phoneController.text = _userData!['phoneNumber'] ?? '';
-        _majorController.text = _userData!['address'] ?? '';
-        _degreeController.text = _userData!['position'] ?? '';
+        _departmentController.text = _userData!['address'] ?? '';
+        _positionController.text = _userData!['position'] ?? '';
         _dobController.text = _userData!['dateOfBirth'] ?? '';
         _profileImageUrl = _userData!['profileImageUrl'];
         final userSex = _userData!['userSex'] as String?;
@@ -136,7 +136,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
       await _firestoreService.saveUser(
         currentUser.uid,
         _userData!['email'] ?? currentUser.email!,
-        'lecturer',
+        'admin',
         username:
             _nameController.text.trim().isEmpty
                 ? null
@@ -150,13 +150,13 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                 ? null
                 : _phoneController.text.trim(),
         address:
-            _majorController.text.trim().isEmpty
+            _departmentController.text.trim().isEmpty
                 ? null
-                : _majorController.text.trim(),
+                : _departmentController.text.trim(),
         position:
-            _degreeController.text.trim().isEmpty
+            _positionController.text.trim().isEmpty
                 ? null
-                : _degreeController.text.trim(),
+                : _positionController.text.trim(),
         dateOfBirth:
             _dobController.text.trim().isEmpty
                 ? null
@@ -193,8 +193,8 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _majorController.dispose();
-    _degreeController.dispose();
+    _departmentController.dispose();
+    _positionController.dispose();
     _dobController.dispose();
     super.dispose();
   }
@@ -202,7 +202,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600; // Added declaration for isMobile
+    final isMobile = screenWidth < 600;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -220,7 +220,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                     flexibleSpace: FlexibleSpaceBar(
                       centerTitle: true,
                       title: Text(
-                        'Lecturer Profile Settings',
+                        'Admin Profile Settings',
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
@@ -341,8 +341,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                   controller: _nameController,
                                   label: 'Full Name',
                                   icon: Icons.person,
-                                  validator:
-                                      null, // Removed validation to make optional
+                                  validator: null, // Optional field
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
@@ -358,7 +357,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                                     r'^\+?[\d\s-]{10,}$',
                                                   ).hasMatch(value)
                                               ? 'Invalid phone number format'
-                                              : null, // Validation only if value is provided
+                                              : null, // Validation only if provided
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
@@ -379,23 +378,21 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                                       .isAfter(DateTime.now())
                                                   ? 'Date cannot be in the future'
                                                   : null)
-                                              : null, // Validation only if value is provided
+                                              : null, // Validation only if provided
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
-                                  controller: _majorController,
-                                  label: 'Major/Department',
+                                  controller: _departmentController,
+                                  label: 'Department',
                                   icon: Icons.school,
-                                  validator:
-                                      null, // Removed validation to make optional
+                                  validator: null, // Optional field
                                 ),
                                 const SizedBox(height: 16),
                                 _buildTextField(
-                                  controller: _degreeController,
-                                  label: 'Degree',
-                                  icon: Icons.book,
-                                  validator:
-                                      null, // Removed validation to make optional
+                                  controller: _positionController,
+                                  label: 'Position',
+                                  icon: Icons.work,
+                                  validator: null, // Optional field
                                 ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<String>(
@@ -434,9 +431,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                   onChanged:
                                       (value) =>
                                           setState(() => _selectedSex = value),
-                                  validator:
-                                      (value) =>
-                                          null, // Removed validation to make optional
+                                  validator: (value) => null, // Optional field
                                 ),
                                 const SizedBox(height: 16),
                                 TextButton(
@@ -446,7 +441,7 @@ class _LecturerSettingsPageState extends State<LecturerSettingsPage> {
                                       MaterialPageRoute(
                                         builder:
                                             (context) =>
-                                                const ChangePasswordForLecturerPage(),
+                                                const ChangePasswordForAdminPage(),
                                       ),
                                     );
                                   },

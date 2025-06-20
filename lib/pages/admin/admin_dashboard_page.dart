@@ -9,6 +9,7 @@ import '../../models/interaction.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'admin_settings_page.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
@@ -199,120 +200,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     }
   }
 
-  void _showAccountDetails() async {
-    final currentUser = _authService.getCurrentUser();
-    if (currentUser == null) {
-      _showSnackBar('No user logged in', Colors.redAccent);
-      return;
-    }
-
-    try {
-      final userData = await _firestoreService.getUser(currentUser.uid);
-      if (userData == null) {
-        _showSnackBar('User data not found', Colors.redAccent);
-        return;
-      }
-
-      if (!mounted) return;
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        isScrollControlled: true,
-        builder:
-            (context) => DraggableScrollableSheet(
-              initialChildSize: 0.5,
-              minChildSize: 0.3,
-              maxChildSize: 0.7,
-              builder:
-                  (context, scrollController) => Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, -2),
-                        ),
-                      ],
-                    ),
-                    child: SingleChildScrollView(
-                      controller: scrollController,
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Center(
-                              child: Container(
-                                width: 40,
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Account Details',
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 24,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            _buildDetailRow(
-                              'Email',
-                              userData['email'] as String? ?? 'N/A',
-                            ),
-                            _buildDetailRow(
-                              'Username',
-                              userData['username'] as String? ?? 'N/A',
-                            ),
-                            _buildDetailRow(
-                              'Role',
-                              userData['role'] as String? ?? 'N/A',
-                            ),
-                            const SizedBox(height: 24),
-                            Center(
-                              child: ElevatedButton(
-                                onPressed: () => Navigator.pop(context),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFFF6949),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 32,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Close',
-                                  style: GoogleFonts.poppins(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-            ),
-      );
-    } catch (e) {
-      if (mounted) {
-        _showSnackBar('Failed to load account details: $e', Colors.redAccent);
-      }
-    }
+  void _showAccountDetails() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AdminSettingsPage()),
+    );
   }
 
   void _showFullActivityDetails(Interaction interaction) {
@@ -331,7 +223,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(24),
+                      top: Radius.circular(16),
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -344,7 +236,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   child: SingleChildScrollView(
                     controller: scrollController,
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -360,11 +252,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          Text(
-                            'Activity Details',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 24,
+                          Center(
+                            child: Text(
+                              'Activity Details',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                                color: Colors.black87,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -372,6 +267,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                             'Action',
                             _getActionDescription(interaction),
                           ),
+                          const SizedBox(height: 16),
                           _buildDetailRow(
                             'Timestamp',
                             DateFormat(
@@ -490,23 +386,27 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   String _getActionDescription(Interaction interaction) {
-    final admin = interaction.adminName ?? 'Unknown Admin';
+    final adminEmail = interaction.adminName ?? 'Unknown Admin';
     final action = interaction.action;
-    final target = interaction.targetName ?? 'Unknown User';
-    const targetType = 'account';
+    final targetEmail = interaction.targetName ?? 'Unknown User';
 
     const actionDescriptions = {
-      'create_lecturer': 'Created lecturer $targetType',
-      'create_admin': 'Created admin $targetType',
-      'delete_user': 'Deleted $targetType',
-      'suspend_user': 'Suspended $targetType',
-      'unsuspend_user': 'Unsuspended $targetType',
-      'create_course': 'Created course',
-      'upload_material': 'Uploaded material',
+      'create_lecturer': 'created lecturer account for',
+      'create_admin': 'created admin account for',
+      'delete_user': 'deleted user',
+      'suspend_user': 'suspended user',
+      'unsuspend_user': 'unsuspended user',
+      'create_course': 'created course',
+      'upload_material': 'uploaded material for',
     };
 
-    return actionDescriptions[action]?.replaceFirst(targetType, target) ??
-        (interaction.details ?? 'Performed an action');
+    final description = actionDescriptions[action];
+    if (description != null && action.contains('user')) {
+      return '$adminEmail $description $targetEmail';
+    } else if (description != null) {
+      return '$adminEmail $description ${interaction.details ?? targetEmail}';
+    }
+    return interaction.details ?? 'Performed an action';
   }
 
   @override
@@ -1217,8 +1117,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       color: Colors.redAccent,
                       fontSize: isMobile ? 12 : 14,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 12),
                   Center(
@@ -1326,9 +1224,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
-                fontSize: isMobile ? 14 : 16,
+                fontSize: isMobile ? 12 : 14,
               ),
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: Text(
@@ -1337,7 +1235,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               ).format(interaction.timestamp.toDate()),
               style: GoogleFonts.poppins(
                 color: Colors.grey[600],
-                fontSize: isMobile ? 12 : 13,
+                fontSize: isMobile ? 11 : 12,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1357,23 +1255,29 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-              fontSize: 14,
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+                fontSize: 14,
+              ),
             ),
           ),
-          Flexible(
+          const SizedBox(width: 16),
+          Expanded(
             child: Text(
               value,
-              style: GoogleFonts.poppins(color: Colors.black87, fontSize: 14),
-              textAlign: TextAlign.right,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                color: Colors.black87,
+                fontSize: 14,
+                height: 1.5,
+              ),
+              softWrap: true,
             ),
           ),
         ],
@@ -1469,18 +1373,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 2,
-        alignment: Alignment.center, // Centered content
+        alignment: Alignment.center,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: isMobile ? 28 : 32,
-            color: Colors.white,
-          ), // Larger icon
-          const SizedBox(height: 8), // Increased space between icon and text
+          Icon(icon, size: isMobile ? 28 : 32, color: Colors.white),
+          const SizedBox(height: 8),
           Text(
             label,
             style: GoogleFonts.poppins(
@@ -1488,7 +1388,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               color: Colors.white,
               fontSize: isMobile ? 12 : 14,
             ),
-            textAlign: TextAlign.center, // Centered text
+            textAlign: TextAlign.center,
           ),
         ],
       ),

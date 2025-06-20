@@ -7,9 +7,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hybridlms/models/course.dart';
 import 'package:hybridlms/services/auth_service.dart';
 import 'package:hybridlms/services/firestore_service.dart';
+import 'package:hybridlms/widgets/loading_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:typed_data';
+import 'package:flutter_spinkit/flutter_spinkit.dart'; // Added for LoadingIndicator
 
 class CourseEditor extends StatefulWidget {
   final Course? course;
@@ -132,7 +134,38 @@ class _CourseEditorState extends State<CourseEditor>
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png'],
       );
-      return result?.files.isNotEmpty == true ? result?.files.first : null;
+      final file =
+          result?.files.isNotEmpty == true ? result?.files.first : null;
+      if (file != null) {
+        // Populate bytes if not available (non-web) for web fallback
+        Uint8List? byteData;
+        if (file.bytes == null && file.path != null && !kIsWeb) {
+          final fileObj = File(file.path!);
+          if (await fileObj.exists()) {
+            byteData = await fileObj.readAsBytes(); // Read bytes for web
+          } else {
+            throw Exception('File not found at path: ${file.path}');
+          }
+        } else {
+          byteData = file.bytes; // Use existing bytes if available
+        }
+        // Verify bytes are available if on web
+        if (kIsWeb && (byteData == null || byteData.isEmpty)) {
+          throw Exception('Failed to read bytes from thumbnail: ${file.path}');
+        }
+        // Create a new PlatformFile with the byte data if needed
+        final updatedFile = PlatformFile(
+          name: file.name,
+          size: file.size,
+          path: file.path, // Preserve path for mobile
+          bytes: byteData, // Use bytes for web
+        );
+        print(
+          'Selected thumbnail: ${updatedFile.name}, bytes length: ${updatedFile.bytes?.length}, path: ${updatedFile.path}',
+        );
+        return updatedFile;
+      }
+      return file;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -166,7 +199,7 @@ class _CourseEditorState extends State<CourseEditor>
         final filePath = file.path!;
         final f = File(filePath);
         if (await f.exists()) {
-          uploadData = filePath;
+          uploadData = filePath; // For non-web, path is used by Cloudinary
         } else {
           throw Exception('File not found at path: $filePath');
         }
@@ -206,19 +239,25 @@ class _CourseEditorState extends State<CourseEditor>
       );
       dynamic uploadData;
       if (kIsWeb) {
-        uploadData = _selectedThumbnail!.bytes;
+        uploadData = _selectedThumbnail!.bytes; // Use bytes on web
       } else {
-        final file = File(_selectedThumbnail!.path!);
-        if (await file.exists()) {
-          uploadData = _selectedThumbnail!.path;
+        // On mobile, use path if available
+        if (_selectedThumbnail!.path != null) {
+          final file = File(_selectedThumbnail!.path!);
+          if (await file.exists()) {
+            uploadData = _selectedThumbnail!.path; // Use path for mobile
+          } else {
+            throw Exception(
+              'File not found at path: ${_selectedThumbnail!.path}',
+            );
+          }
         } else {
-          throw Exception(
-            'File not found at path: ${_selectedThumbnail!.path}',
-          );
+          throw Exception('No valid path for thumbnail on mobile');
         }
       }
       if (uploadData == null ||
-          (uploadData is Uint8List && uploadData.isEmpty)) {
+          (uploadData is Uint8List && uploadData.isEmpty) ||
+          (uploadData is String && uploadData.isEmpty)) {
         throw Exception('Invalid thumbnail data');
       }
       final url = await firestoreService.uploadToCloudinary(
@@ -960,9 +999,7 @@ class _CourseEditorState extends State<CourseEditor>
       backgroundColor: Colors.grey[50],
       body:
           _isLoading
-              ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFFFF6949)),
-              )
+              ? const LoadingIndicator() // Replaced CircularProgressIndicator with LoadingIndicator
               : CustomScrollView(
                 slivers: [
                   SliverAppBar(
@@ -1144,7 +1181,8 @@ class _CourseEditorState extends State<CourseEditor>
                                   allowedExtensions: ['jpg', 'jpeg', 'png'],
                                 ),
                                 if (_selectedThumbnail != null ||
-                                    widget.course?.thumbnailUrl != null)
+                                    (widget.course?.thumbnailUrl != null &&
+                                        widget.course != null))
                                   Padding(
                                     padding: const EdgeInsets.only(top: 8.0),
                                     child: Stack(
@@ -1156,7 +1194,13 @@ class _CourseEditorState extends State<CourseEditor>
                                           ),
                                           child: Image.network(
                                             _selectedThumbnail != null
-                                                ? 'data:image/png;base64,${base64Encode(_selectedThumbnail!.bytes!)}'
+                                                ? _selectedThumbnail!.bytes !=
+                                                        null
+                                                    ? 'data:image/png;base64,${base64Encode(_selectedThumbnail!.bytes!)}'
+                                                    : widget
+                                                            .course
+                                                            ?.thumbnailUrl ??
+                                                        ''
                                                 : widget.course!.thumbnailUrl!,
                                             width: 150,
                                             height: 100,

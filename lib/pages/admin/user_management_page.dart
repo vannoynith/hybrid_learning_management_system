@@ -314,9 +314,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
     if (confirmed && mounted) {
       setState(() => _isDeleting = true);
       try {
+        // Fetch user data before deletion for logging and feedback
         final userData = await _firestoreService.getUser(uid);
-        final userEmail = userData?['email'] ?? uid;
+        final userEmail = userData?['email'] ?? 'Unknown User';
+        // Delete user via FirestoreService
         await _firestoreService.deleteUser(uid, currentUser.uid);
+        // Refresh user list
         await _loadUsers();
         _showSuccessSnackBar('User deleted: $userEmail');
       } catch (e) {
