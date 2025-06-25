@@ -59,11 +59,9 @@ class FirestoreService {
         throw Exception('Invalid role: $role');
       }
 
-      // Fetch existing user data
       final userDoc = await _db.collection('users').doc(uid).get();
       final existingData = userDoc.exists ? userDoc.data() ?? {} : {};
 
-      // Prepare updated data, preserving existing fields unless new values are provided
       final updatedData = {
         'uid': uid,
         'email': email,
@@ -469,12 +467,9 @@ class FirestoreService {
 
   Future<void> logInteraction(Interaction interaction) async {
     try {
-      if (interaction.userId.isEmpty) {
+      if (interaction.userId.isEmpty)
         throw Exception('User ID cannot be empty');
-      }
-      if (interaction.action.isEmpty) {
-        throw Exception('Action cannot be empty');
-      }
+      if (interaction.action.isEmpty) throw Exception('Action cannot be empty');
       await _db.collection('interactions').add(interaction.toMap());
     } catch (e) {
       throw Exception('Failed to log interaction: $e');
@@ -572,10 +567,15 @@ class FirestoreService {
           courseDoc.exists && courseDoc.data() != null
               ? courseDoc.data()!['category'] as String?
               : null;
+      final previousRating =
+          courseDoc.exists && courseDoc.data() != null
+              ? courseDoc.data()!['rating'] as double?
+              : null;
 
       await _db.runTransaction((transaction) async {
         final courseData = course.toMap();
         courseData['lastModifiedAt'] = FieldValue.serverTimestamp();
+        courseData['rating'] = course.rating;
         transaction.set(_db.collection('courses').doc(course.id), courseData);
 
         final interaction = Interaction(
@@ -586,6 +586,9 @@ class FirestoreService {
               '${course.createdAt == null ? 'Created' : 'Updated'} course: ${course.title}' +
               (previousCategory != course.category
                   ? ' (Category changed from $previousCategory to ${course.category})'
+                  : '') +
+              (previousRating != course.rating
+                  ? ' (Rating changed from $previousRating to ${course.rating})'
                   : ''),
           timestamp: Timestamp.now(),
         );
@@ -594,6 +597,10 @@ class FirestoreService {
           interaction.toMap(),
         );
       });
+
+      if (course.modules != null) {
+        await saveCourseSubcollections(course.id, course.modules!);
+      }
     } catch (e) {
       throw Exception('Failed to save course: $e');
     }
@@ -631,7 +638,6 @@ class FirestoreService {
       }
 
       await _db.runTransaction((transaction) async {
-        // Update or create new modules
         for (var module in modules) {
           final moduleId = module['id'] ?? const Uuid().v4();
           transaction.set(
@@ -655,7 +661,6 @@ class FirestoreService {
                   .toSet() ??
               {};
 
-          // Update existing lessons or add new ones
           for (var lesson in module['lessons'] ?? []) {
             final lessonId = lesson['id'] ?? const Uuid().v4();
             transaction.set(
@@ -679,7 +684,6 @@ class FirestoreService {
             );
           }
 
-          // Remove lessons that are no longer in the updated data
           for (var lessonId in existingLessonIds.difference(newLessonIds)) {
             transaction.delete(
               _db
@@ -693,7 +697,6 @@ class FirestoreService {
           }
         }
 
-        // Remove modules that are no longer in the updated data
         final newModuleIds =
             modules.map((module) => module['id'] as String).toSet();
         for (var moduleId in existingModuleIds.difference(newModuleIds)) {
@@ -870,6 +873,7 @@ class FirestoreService {
   }) async {
     try {
       if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+      print('Querying courses for lecturerId: $lecturerId');
       Query query = _db
           .collection('courses')
           .where('lecturerId', isEqualTo: lecturerId)
@@ -878,63 +882,221 @@ class FirestoreService {
         query = query.where('category', isEqualTo: category);
       }
       final querySnapshot = await query.get();
+      print('Found ${querySnapshot.docs.length} courses');
       final courses = <Course>[];
       for (var doc in querySnapshot.docs) {
-        final data = doc.data();
-        if (data == null) continue;
-        final courseData = data as Map<String, dynamic>;
-
-        final modulesSnapshot =
-            await _db
-                .collection('courses')
-                .doc(doc.id)
-                .collection('modules')
-                .get();
-        final modules = <Map<String, dynamic>>[];
-        for (var moduleDoc in modulesSnapshot.docs) {
-          final moduleData = moduleDoc.data() as Map<String, dynamic>;
-          final lessonsSnapshot =
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) {
+          print('Skipping null data for course ID: ${doc.id}');
+          continue;
+        }
+        try {
+          final courseData = data;
+          final modulesSnapshot =
               await _db
                   .collection('courses')
                   .doc(doc.id)
                   .collection('modules')
-                  .doc(moduleData['id'])
-                  .collection('lessons')
                   .get();
-          final lessons =
-              lessonsSnapshot.docs
-                  .map(
-                    (lessonDoc) => ({
-                      'id': lessonDoc.id ?? const Uuid().v4(),
-                      'name': lessonDoc['name'] ?? '',
-                      'text': lessonDoc['text'] ?? '',
-                      'documents': lessonDoc['documents'] ?? [],
-                      'videos': lessonDoc['videos'] ?? [],
-                      'images': lessonDoc['images'] ?? [],
-                      'createdAt':
-                          lessonDoc['createdAt'] ??
-                          FieldValue.serverTimestamp(),
-                    }),
-                  )
-                  .toList();
-          modules.add({
-            'id': moduleData['id'],
-            'name': moduleData['name'],
-            'lessons': lessons,
-            'createdAt':
-                moduleData['createdAt'] ?? FieldValue.serverTimestamp(),
-          });
+          final modules = <Map<String, dynamic>>[];
+          for (var moduleDoc in modulesSnapshot.docs) {
+            final moduleData = moduleDoc.data() as Map<String, dynamic>;
+            final lessonsSnapshot =
+                await _db
+                    .collection('courses')
+                    .doc(doc.id)
+                    .collection('modules')
+                    .doc(moduleData['id'])
+                    .collection('lessons')
+                    .get();
+            final lessons =
+                lessonsSnapshot.docs.map((lessonDoc) {
+                  final lessonData = lessonDoc.data() as Map<String, dynamic>;
+                  return {
+                    'id': lessonData['id'] ?? const Uuid().v4(),
+                    'name': lessonData['name'] ?? '',
+                    'text': lessonData['text'] ?? '',
+                    'documents': lessonData['documents'] ?? [],
+                    'videos': lessonData['videos'] ?? [],
+                    'images': lessonData['images'] ?? [],
+                    'createdAt':
+                        lessonData['createdAt'] ?? FieldValue.serverTimestamp(),
+                  };
+                }).toList();
+            modules.add({
+              'id': moduleData['id'],
+              'name': moduleData['name'],
+              'lessons': lessons,
+              'createdAt':
+                  moduleData['createdAt'] ?? FieldValue.serverTimestamp(),
+            });
+          }
+          courseData['modules'] = modules.isEmpty ? null : modules;
+          courses.add(Course.fromMap(courseData, doc.id));
+        } catch (e) {
+          print('Error parsing course ${doc.id}: $e');
+          continue;
         }
-        courseData['modules'] = modules.isEmpty ? null : modules;
-        courses.add(Course.fromMap(courseData, doc.id));
       }
+      print('Returning ${courses.length} courses');
       return courses;
     } catch (e) {
+      print('Error in getLecturerCourses: $e');
+      if (e.toString().contains('failed-precondition')) {
+        throw Exception(
+          'Failed to get courses: Missing Firestore index. Please create it in the Firebase Console at https://console.firebase.google.com/project/your-project-id/firestore/indexes.',
+        );
+      }
+      if (e.toString().contains('permission-denied')) {
+        throw Exception(
+          'Failed to get courses: Permission denied. Check Firestore security rules.',
+        );
+      }
       throw Exception('Failed to get lecturer courses: $e');
     }
   }
 
-  Future<void> enrollStudent(String courseId, String studentId) async {
+  Future<void> updateCourse(String lecturerId, Course course) async {
+    try {
+      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+      if (course.id.isEmpty) throw Exception('Course ID cannot be empty');
+      if (course.title.isEmpty) throw Exception('Course title cannot be empty');
+      if (course.category != null && course.category!.isEmpty) {
+        throw Exception('Course category cannot be empty if provided');
+      }
+
+      final courseDoc = await _db.collection('courses').doc(course.id).get();
+      if (!courseDoc.exists) throw Exception('Course not found: ${course.id}');
+      final existingData = courseDoc.data() as Map<String, dynamic>? ?? {};
+      if (existingData['lecturerId'] != lecturerId) {
+        throw Exception('Unauthorized: Not the course lecturer');
+      }
+
+      final previousCategory = existingData['category'] as String?;
+      final previousPublished = existingData['isPublished'] as bool? ?? false;
+      final previousThumbnailUrl = existingData['thumbnailUrl'] as String?;
+      final previousModules = existingData['modules'] as List<dynamic>?;
+      final previousContentUrls =
+          existingData['contentUrls'] as List<dynamic>? ?? [];
+      final previousEnrolledCount = existingData['enrolledCount'] as int? ?? 0;
+      final previousRating = existingData['rating'] as double?;
+
+      final updatedData = course.toMap();
+      updatedData['lastModifiedAt'] = FieldValue.serverTimestamp();
+      if (course.modules == null) updatedData['modules'] = previousModules;
+      if (course.contentUrls.isEmpty)
+        updatedData['contentUrls'] = previousContentUrls;
+      if (course.enrolledCount == 0)
+        updatedData['enrolledCount'] = previousEnrolledCount;
+      if (course.rating == null) updatedData['rating'] = previousRating;
+
+      final changes = <String>[];
+      if (previousCategory != course.category) {
+        changes.add(
+          'Category changed from $previousCategory to ${course.category}',
+        );
+      }
+      if (course.isPublished != previousPublished) {
+        changes.add(
+          'Publish status changed to ${course.isPublished ? 'Published' : 'Draft'}',
+        );
+      }
+      if (course.thumbnailUrl != previousThumbnailUrl &&
+          course.thumbnailUrl != null) {
+        changes.add('Thumbnail updated');
+      }
+      if (previousRating != course.rating) {
+        changes.add('Rating changed from $previousRating to ${course.rating}');
+      }
+
+      await _db.runTransaction((transaction) async {
+        transaction.set(
+          _db.collection('courses').doc(course.id),
+          updatedData,
+          SetOptions(merge: true),
+        );
+
+        if (course.isPublished != previousPublished) {
+          transaction.update(_db.collection('courses').doc(course.id), {
+            'isPublished': course.isPublished,
+            if (course.isPublished) 'publishedAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        final interaction = Interaction(
+          userId: lecturerId,
+          action: 'update_course',
+          targetId: course.id,
+          details:
+              'Updated course: ${course.title}' +
+              (changes.isNotEmpty ? ' (${changes.join(', ')})' : ''),
+          timestamp: Timestamp.now(),
+        );
+        transaction.set(
+          _db.collection('interactions').doc(),
+          interaction.toMap(),
+        );
+      });
+
+      if (course.modules != null) {
+        await saveCourseSubcollections(course.id, course.modules!);
+      }
+    } catch (e) {
+      throw Exception('Failed to update course: $e');
+    }
+  }
+
+  Future<List<Course>> getPublishedCourses({String? category}) async {
+    try {
+      print(
+        'Querying published courses, category: $category at ${DateTime.now()}',
+      );
+      Query query = _db
+          .collection('courses')
+          .where('isPublished', isEqualTo: true)
+          .orderBy('createdAt', descending: true);
+      if (category != null && category.isNotEmpty) {
+        query = query.where('category', isEqualTo: category);
+      }
+      final querySnapshot = await query.get();
+      print('Found ${querySnapshot.docs.length} published courses');
+      final courses = <Course>[];
+      for (var doc in querySnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) {
+          print('Skipping null data for course ID: ${doc.id}');
+          continue;
+        }
+        try {
+          courses.add(Course.fromMap(data, doc.id));
+        } catch (e) {
+          print('Error parsing course ${doc.id}: $e');
+          continue;
+        }
+      }
+      print('Returning ${courses.length} published courses');
+      return courses;
+    } catch (e) {
+      print('Error in getPublishedCourses: $e at ${DateTime.now()}');
+      if (e.toString().contains('failed-precondition')) {
+        throw Exception(
+          'Failed to get published courses: Missing Firestore index. Please create it in the Firebase Console.',
+        );
+      }
+      if (e.toString().contains('permission-denied')) {
+        throw Exception(
+          'Failed to get published courses: Permission denied. Check Firestore security rules.',
+        );
+      }
+      throw Exception('Failed to get published courses: $e');
+    }
+  }
+
+  Future<void> enrollStudent(
+    String courseId,
+    String studentId, {
+    String? token,
+  }) async {
     try {
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
       if (studentId.isEmpty) throw Exception('Student ID cannot be empty');
@@ -945,6 +1107,24 @@ class FirestoreService {
         throw Exception('Invalid or non-student user: $studentId');
       }
 
+      // Validate token if provided
+      if (token != null && token.isNotEmpty) {
+        final classSnapshot =
+            await _db
+                .collection('classes')
+                .where('courseId', isEqualTo: courseId)
+                .where('token', isEqualTo: token)
+                .get();
+        if (classSnapshot.docs.isEmpty) {
+          throw Exception('Invalid token for course: $courseId');
+        }
+        final classData = classSnapshot.docs.first.data();
+        final deadline = classData['deadline'] as Timestamp?;
+        if (deadline != null && deadline.toDate().isBefore(DateTime.now())) {
+          throw Exception('Class token has expired.');
+        }
+      }
+
       await _db.runTransaction((transaction) async {
         final enrollmentRef = _db
             .collection('enrollments')
@@ -953,6 +1133,7 @@ class FirestoreService {
           'courseId': courseId,
           'studentId': studentId,
           'enrolledAt': FieldValue.serverTimestamp(),
+          if (token != null) 'classToken': token,
         });
         transaction.update(_db.collection('courses').doc(courseId), {
           'enrolledCount': FieldValue.increment(1),
@@ -961,7 +1142,8 @@ class FirestoreService {
           userId: studentId,
           action: 'enroll_course',
           targetId: courseId,
-          details: 'Student enrolled in course: $courseId',
+          details:
+              'Student enrolled in course: $courseId${token != null ? ' with token: $token' : ''}',
           timestamp: Timestamp.now(),
         );
         transaction.set(
@@ -997,77 +1179,34 @@ class FirestoreService {
     }
   }
 
-  Future<void> updateCourse(String lecturerId, Course course) async {
+  Future<void> updateCourseRating(
+    String courseId,
+    String userId,
+    double newRating,
+  ) async {
     try {
-      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
-      if (course.id.isEmpty) throw Exception('Course ID cannot be empty');
-      if (course.title.isEmpty) throw Exception('Course title cannot be empty');
-      if (course.category != null && course.category!.isEmpty) {
-        throw Exception('Course category cannot be empty if provided');
-      }
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (userId.isEmpty) throw Exception('User ID cannot be empty');
+      if (newRating < 0 || newRating > 5)
+        throw Exception('Rating must be between 0 and 5');
 
-      final courseDoc = await _db.collection('courses').doc(course.id).get();
-      if (!courseDoc.exists) throw Exception('Course not found: ${course.id}');
-      final existingData = courseDoc.data() as Map<String, dynamic>? ?? {};
-      if (existingData['lecturerId'] != lecturerId) {
-        throw Exception('Unauthorized: Not the course lecturer');
-      }
-
-      // Fetch existing values to preserve if not updated
-      final previousCategory = existingData['category'] as String?;
-      final previousPublished = existingData['isPublished'] as bool? ?? false;
-      final previousThumbnailUrl = existingData['thumbnailUrl'] as String?;
-      final previousModules = existingData['modules'] as List<dynamic>?;
-      final previousContentUrls =
-          existingData['contentUrls'] as List<dynamic>? ?? [];
-      final previousEnrolledCount = existingData['enrolledCount'] as int? ?? 0;
-
-      // Prepare updated data, preserving unchanged fields
-      final updatedData = course.toMap();
-      updatedData['lastModifiedAt'] = FieldValue.serverTimestamp();
-      if (course.modules == null) updatedData['modules'] = previousModules;
-      if (course.contentUrls.isEmpty)
-        updatedData['contentUrls'] = previousContentUrls;
-      if (course.enrolledCount == 0)
-        updatedData['enrolledCount'] = previousEnrolledCount;
-
-      final changes = <String>[];
-      if (previousCategory != course.category) {
-        changes.add(
-          'Category changed from $previousCategory to ${course.category}',
-        );
-      }
-      if (course.isPublished != previousPublished) {
-        changes.add(
-          'Publish status changed to ${course.isPublished ? 'Published' : 'Draft'}',
-        );
-      }
-      if (course.thumbnailUrl != previousThumbnailUrl &&
-          course.thumbnailUrl != null) {
-        changes.add('Thumbnail updated');
-      }
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+      final courseData = courseDoc.data() as Map<String, dynamic>? ?? {};
+      final previousRating = courseData['rating'] as double?;
 
       await _db.runTransaction((transaction) async {
-        transaction.set(
-          _db.collection('courses').doc(course.id),
-          updatedData,
-          SetOptions(merge: true),
-        );
-
-        if (course.isPublished != previousPublished) {
-          transaction.update(_db.collection('courses').doc(course.id), {
-            'isPublished': course.isPublished,
-            if (course.isPublished) 'publishedAt': FieldValue.serverTimestamp(),
-          });
-        }
+        transaction.update(_db.collection('courses').doc(courseId), {
+          'rating': newRating,
+          'lastModifiedAt': FieldValue.serverTimestamp(),
+        });
 
         final interaction = Interaction(
-          userId: lecturerId,
-          action: 'update_course',
-          targetId: course.id,
+          userId: userId,
+          action: 'update_course_rating',
+          targetId: courseId,
           details:
-              'Updated course: ${course.title}' +
-              (changes.isNotEmpty ? ' (${changes.join(', ')})' : ''),
+              'Updated course rating from $previousRating to $newRating for course: ${courseData['title'] ?? courseId}',
           timestamp: Timestamp.now(),
         );
         transaction.set(
@@ -1075,13 +1214,8 @@ class FirestoreService {
           interaction.toMap(),
         );
       });
-
-      // Update subcollections only if modules are provided
-      if (course.modules != null) {
-        await saveCourseSubcollections(course.id, course.modules!);
-      }
     } catch (e) {
-      throw Exception('Failed to update course: $e');
+      throw Exception('Failed to update course rating: $e');
     }
   }
 
@@ -1094,9 +1228,8 @@ class FirestoreService {
   ) async {
     try {
       if (file == null) throw Exception('File cannot be null');
-      if (!['image', 'pdf', 'video', 'doc'].contains(type)) {
+      if (!['image', 'pdf', 'video', 'doc'].contains(type))
         throw Exception('Invalid content type: $type');
-      }
       if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
       if (moduleId.isEmpty) throw Exception('Module ID cannot be empty');
       if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
@@ -1111,6 +1244,75 @@ class FirestoreService {
       return url;
     } catch (e) {
       throw Exception('Failed to upload lesson content: $e');
+    }
+  }
+
+  Future<void> createClass({
+    required String courseId,
+    required String lecturerId,
+    required String token,
+    DateTime? deadline,
+  }) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (lecturerId.isEmpty) throw Exception('Lecturer ID cannot be empty');
+      if (token.isEmpty) throw Exception('Token cannot be empty');
+      final courseDoc = await _db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists) throw Exception('Course not found: $courseId');
+      final courseData = courseDoc.data();
+      if (courseData == null) throw Exception('Course data is null');
+      if (courseData['lecturerId'] != lecturerId) {
+        throw Exception('Unauthorized: Not the course lecturer');
+      }
+
+      final classId = const Uuid().v4();
+      await _db.runTransaction((transaction) async {
+        transaction.set(_db.collection('classes').doc(classId), {
+          'id': classId,
+          'courseId': courseId,
+          'token': token,
+          'deadline': deadline != null ? Timestamp.fromDate(deadline) : null,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        final interaction = Interaction(
+          userId: lecturerId,
+          action: 'create_class',
+          targetId: courseId,
+          details:
+              'Created class for course: ${courseData['title'] ?? courseId} with token: $token',
+          timestamp: Timestamp.now(),
+        );
+        transaction.set(
+          _db.collection('interactions').doc(),
+          interaction.toMap(),
+        );
+      });
+    } catch (e) {
+      throw Exception('Failed to create class: $e');
+    }
+  }
+
+  Future<bool> validateClassToken(String courseId, String token) async {
+    try {
+      if (courseId.isEmpty) throw Exception('Course ID cannot be empty');
+      if (token.isEmpty) throw Exception('Token cannot be empty');
+      final classSnapshot =
+          await _db
+              .collection('classes')
+              .where('courseId', isEqualTo: courseId)
+              .where('token', isEqualTo: token)
+              .get();
+      if (classSnapshot.docs.isEmpty) {
+        return false;
+      }
+      final classData = classSnapshot.docs.first.data();
+      final deadline = classData['deadline'] as Timestamp?;
+      if (deadline != null && deadline.toDate().isBefore(DateTime.now())) {
+        return false;
+      }
+      return true;
+    } catch (e) {
+      throw Exception('Failed to validate class token: $e');
     }
   }
 }

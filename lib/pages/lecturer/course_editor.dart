@@ -11,11 +11,11 @@ import 'package:hybridlms/widgets/loading_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:typed_data';
-import 'package:flutter_spinkit/flutter_spinkit.dart'; // Added for LoadingIndicator
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 class CourseEditor extends StatefulWidget {
   final Course? course;
-  final Function(Course)? onSave; // Callback for saving/updating
+  final Function(Course)? onSave;
 
   const CourseEditor({super.key, this.course, this.onSave});
 
@@ -38,7 +38,6 @@ class _CourseEditorState extends State<CourseEditor>
   late Animation<double> _snackbarFadeAnimation;
   String? _selectedCategory;
 
-  // Define course categories
   static const List<String> courseCategories = [
     'Network IT',
     'Finance',
@@ -106,6 +105,7 @@ class _CourseEditorState extends State<CourseEditor>
       begin: 0,
       end: 1,
     ).animate(_snackbarAnimationController);
+    _animationController.forward();
   }
 
   @override
@@ -137,28 +137,25 @@ class _CourseEditorState extends State<CourseEditor>
       final file =
           result?.files.isNotEmpty == true ? result?.files.first : null;
       if (file != null) {
-        // Populate bytes if not available (non-web) for web fallback
         Uint8List? byteData;
         if (file.bytes == null && file.path != null && !kIsWeb) {
           final fileObj = File(file.path!);
           if (await fileObj.exists()) {
-            byteData = await fileObj.readAsBytes(); // Read bytes for web
+            byteData = await fileObj.readAsBytes();
           } else {
             throw Exception('File not found at path: ${file.path}');
           }
         } else {
-          byteData = file.bytes; // Use existing bytes if available
+          byteData = file.bytes;
         }
-        // Verify bytes are available if on web
         if (kIsWeb && (byteData == null || byteData.isEmpty)) {
           throw Exception('Failed to read bytes from thumbnail: ${file.path}');
         }
-        // Create a new PlatformFile with the byte data if needed
         final updatedFile = PlatformFile(
           name: file.name,
           size: file.size,
-          path: file.path, // Preserve path for mobile
-          bytes: byteData, // Use bytes for web
+          path: file.path,
+          bytes: byteData,
         );
         print(
           'Selected thumbnail: ${updatedFile.name}, bytes length: ${updatedFile.bytes?.length}, path: ${updatedFile.path}',
@@ -199,7 +196,7 @@ class _CourseEditorState extends State<CourseEditor>
         final filePath = file.path!;
         final f = File(filePath);
         if (await f.exists()) {
-          uploadData = filePath; // For non-web, path is used by Cloudinary
+          uploadData = filePath;
         } else {
           throw Exception('File not found at path: $filePath');
         }
@@ -239,13 +236,12 @@ class _CourseEditorState extends State<CourseEditor>
       );
       dynamic uploadData;
       if (kIsWeb) {
-        uploadData = _selectedThumbnail!.bytes; // Use bytes on web
+        uploadData = _selectedThumbnail!.bytes;
       } else {
-        // On mobile, use path if available
         if (_selectedThumbnail!.path != null) {
           final file = File(_selectedThumbnail!.path!);
           if (await file.exists()) {
-            uploadData = _selectedThumbnail!.path; // Use path for mobile
+            uploadData = _selectedThumbnail!.path;
           } else {
             throw Exception(
               'File not found at path: ${_selectedThumbnail!.path}',
@@ -430,6 +426,7 @@ class _CourseEditorState extends State<CourseEditor>
           }
 
           for (var file in (lesson['videos'] as List<dynamic>?) ?? []) {
+            // Fixed typo here
             if (file is PlatformFile) {
               final url = await _uploadFile(
                 file,
@@ -483,7 +480,7 @@ class _CourseEditorState extends State<CourseEditor>
         description: _descriptionController.text.trim(),
         lecturerId: user.uid,
         isPublished: _isPublished,
-        createdAt: widget.course?.createdAt, // Preserve original creation date
+        createdAt: widget.course?.createdAt,
         thumbnailUrl: thumbnailUrl,
         modules: processedModules,
         contentUrls:
@@ -497,22 +494,19 @@ class _CourseEditorState extends State<CourseEditor>
                   ],
                 )
                 .toList(),
-        enrolledCount:
-            widget.course?.enrolledCount ?? 0, // Preserve enrolled count
+        enrolledCount: widget.course?.enrolledCount ?? 0,
         category: _selectedCategory,
+        lecturerDisplayName: '',
       );
 
       if (widget.onSave != null && widget.course != null) {
-        await widget.onSave!(course); // Use callback for update
+        await widget.onSave!(course);
       } else {
         final firestoreService = Provider.of<FirestoreService>(
           context,
           listen: false,
         );
-        await firestoreService.saveCourse(
-          user.uid,
-          course,
-        ); // Create new course
+        await firestoreService.saveCourse(user.uid, course);
         if (_isPublished) {
           await firestoreService.publishCourse(course.id, user.uid);
         }
@@ -609,26 +603,29 @@ class _CourseEditorState extends State<CourseEditor>
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey[200]!),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFFF6949), width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Colors.redAccent),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Colors.redAccent, width: 2),
         ),
-        labelStyle: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 16),
+        labelStyle: GoogleFonts.poppins(
+          color: Colors.grey[700],
+          fontSize: isMobile ? 14 : 16,
+        ),
       ),
       keyboardType: keyboardType,
       obscureText: obscureText,
@@ -642,7 +639,7 @@ class _CourseEditorState extends State<CourseEditor>
     required String label,
     required IconData icon,
     required VoidCallback onTap,
-    required List<PlatformFile> files,
+    required List<dynamic> files,
     required String fileType,
     List<String>? allowedExtensions,
   }) {
@@ -653,29 +650,32 @@ class _CourseEditorState extends State<CourseEditor>
         GestureDetector(
           onTap: onTap,
           child: Container(
-            height: 100,
+            height: 80,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.grey[400]!,
-                width: 2,
-                style: BorderStyle.solid,
-              ),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: Column(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 32, color: const Color(0xFFFF6949)),
-                const SizedBox(height: 8),
+                Icon(icon, size: 28, color: const Color(0xFFFF6949)),
+                const SizedBox(width: 8),
                 Text(
-                  'Click to upload $fileType',
+                  'Upload $fileType',
                   style: GoogleFonts.poppins(
-                    fontSize: isMobile ? 12 : 14,
-                    color: Colors.grey[600],
+                    fontSize: isMobile ? 14 : 16,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -683,31 +683,32 @@ class _CourseEditorState extends State<CourseEditor>
         ),
         if (files.isNotEmpty) ...[
           const SizedBox(height: 12),
-          SizedBox(
-            height: 50,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: files.length,
-              itemBuilder: (context, index) {
-                final file = files[index];
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: Chip(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children:
+                files.asMap().entries.map((entry) {
+                  final file = entry.value;
+                  final fileName =
+                      file is PlatformFile
+                          ? file.name
+                          : file.toString().split('/').last;
+                  return Chip(
                     label: Text(
-                      file.name,
-                      style: GoogleFonts.poppins(fontSize: 12),
+                      fileName,
+                      style: GoogleFonts.poppins(fontSize: isMobile ? 12 : 14),
                     ),
-                    deleteIcon: const Icon(Icons.close, size: 16),
+                    deleteIcon: const Icon(Icons.close, size: 18),
                     onDeleted: () {
-                      setState(() {
-                        files.removeAt(index);
-                      });
+                      setState(() => files.removeAt(entry.key));
                     },
-                    backgroundColor: Colors.grey[200],
-                  ),
-                );
-              },
-            ),
+                    backgroundColor: Colors.grey[100],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 2,
+                  );
+                }).toList(),
           ),
         ],
         const SizedBox(height: 12),
@@ -719,84 +720,92 @@ class _CourseEditorState extends State<CourseEditor>
     final lesson = _modules[moduleIndex]['lessons'][lessonIndex];
     final isMobile = MediaQuery.of(context).size.width < 600;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextFormField(
-          initialValue: lesson['text'],
-          decoration: InputDecoration(
-            labelText: 'Lesson Text',
-            hintText: 'Enter lesson content (e.g., lecture notes)',
-            hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
-            prefixIcon: const Icon(Icons.text_fields, color: Color(0xFFFF6949)),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            initialValue: lesson['text'],
+            decoration: InputDecoration(
+              labelText: 'Lesson Content',
+              hintText: 'Enter lesson content (e.g., lecture notes)',
+              hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
+              prefixIcon: const Icon(
+                Icons.text_fields,
+                color: Color(0xFFFF6949),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Color(0xFFFF6949),
+                  width: 2,
+                ),
+              ),
+              labelStyle: GoogleFonts.poppins(
+                color: Colors.grey[700],
+                fontSize: isMobile ? 14 : 16,
+              ),
             ),
-            labelStyle: GoogleFonts.poppins(
-              color: Colors.grey[700],
-              fontSize: 16,
-            ),
+            maxLines: 4,
+            onChanged: (value) => setState(() => lesson['text'] = value),
           ),
-          maxLines: 3,
-          onChanged: (value) => setState(() => lesson['text'] = value),
-        ),
-        const SizedBox(height: 12),
-        _buildFilePicker(
-          label: 'Upload Documents',
-          icon: Icons.upload_file,
-          onTap: () async {
-            final files = await _pickFiles(
-              allowedExtensions: ['pdf', 'doc', 'docx'],
-            );
-            if (files.isNotEmpty) {
-              setState(() => lesson['documents'] = files);
-            }
-          },
-          files:
-              lesson['documents'] is List<PlatformFile>
-                  ? List<PlatformFile>.from(lesson['documents'])
-                  : <PlatformFile>[],
-          fileType: 'Documents',
-          allowedExtensions: ['pdf', 'doc', 'docx'],
-        ),
-        _buildFilePicker(
-          label: 'Upload Videos',
-          icon: Icons.video_library,
-          onTap: () async {
-            final files = await _pickFiles(allowedExtensions: ['mp4', 'mov']);
-            if (files.isNotEmpty) {
-              setState(() => lesson['videos'] = files);
-            }
-          },
-          files:
-              lesson['videos'] is List<PlatformFile>
-                  ? List<PlatformFile>.from(lesson['videos'])
-                  : <PlatformFile>[],
-          fileType: 'Videos',
-          allowedExtensions: ['mp4', 'mov'],
-        ),
-        _buildFilePicker(
-          label: 'Upload Images',
-          icon: Icons.image,
-          onTap: () async {
-            final files = await _pickFiles(
-              allowedExtensions: ['jpg', 'jpeg', 'png'],
-            );
-            if (files.isNotEmpty) {
-              setState(() => lesson['images'] = files);
-            }
-          },
-          files:
-              lesson['images'] is List<PlatformFile>
-                  ? List<PlatformFile>.from(lesson['images'])
-                  : <PlatformFile>[],
-          fileType: 'Images',
-          allowedExtensions: ['jpg', 'jpeg', 'png'],
-        ),
-      ],
+          const SizedBox(height: 16),
+          _buildFilePicker(
+            label: 'Upload Documents',
+            icon: Icons.upload_file,
+            onTap: () async {
+              final files = await _pickFiles(
+                allowedExtensions: ['pdf', 'doc', 'docx'],
+              );
+              if (files.isNotEmpty) {
+                setState(() => lesson['documents'] = files);
+              }
+            },
+            files: lesson['documents'] ?? [],
+            fileType: 'Documents',
+            allowedExtensions: ['pdf', 'doc', 'docx'],
+          ),
+          _buildFilePicker(
+            label: 'Upload Videos',
+            icon: Icons.video_library,
+            onTap: () async {
+              final files = await _pickFiles(allowedExtensions: ['mp4', 'mov']);
+              if (files.isNotEmpty) {
+                setState(() => lesson['videos'] = files);
+              }
+            },
+            files: lesson['videos'] ?? [],
+            fileType: 'Videos',
+            allowedExtensions: ['mp4', 'mov'],
+          ),
+          _buildFilePicker(
+            label: 'Upload Images',
+            icon: Icons.image,
+            onTap: () async {
+              final files = await _pickFiles(
+                allowedExtensions: ['jpg', 'jpeg', 'png'],
+              );
+              if (files.isNotEmpty) {
+                setState(() => lesson['images'] = files);
+              }
+            },
+            files: lesson['images'] ?? [],
+            fileType: 'Images',
+            allowedExtensions: ['jpg', 'jpeg', 'png'],
+          ),
+        ],
+      ),
     );
   }
 
@@ -815,7 +824,14 @@ class _CourseEditorState extends State<CourseEditor>
         onPressed: isLoading ? null : onPressed,
         icon:
             isLoading
-                ? const SizedBox.shrink()
+                ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
                 : Icon(icon, color: Colors.white),
         label: Text(
           label,
@@ -831,12 +847,12 @@ class _CourseEditorState extends State<CourseEditor>
             vertical: isMobile ? 12 : 16,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
           ),
           backgroundColor: const Color(0xFFFF6949),
           foregroundColor: Colors.white,
-          elevation: 4,
-          shadowColor: Colors.black26,
+          elevation: 3,
+          shadowColor: Colors.black.withOpacity(0.2),
         ),
       ),
     );
@@ -845,147 +861,158 @@ class _CourseEditorState extends State<CourseEditor>
   Widget _buildModuleSection(int moduleIndex) {
     final module = _modules[moduleIndex];
     final isMobile = MediaQuery.of(context).size.width < 600;
+    final isExpanded = _modules[moduleIndex]['isExpanded'] ?? false;
 
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.grey[50]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: ExpansionTile(
+          leading: const Icon(Icons.library_books, color: Color(0xFFFF6949)),
+          title: TextFormField(
+            initialValue: module['name'],
+            decoration: InputDecoration(
+              hintText: 'Enter module name (e.g., Introduction)',
+              hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+            style: GoogleFonts.poppins(
+              fontSize: isMobile ? 16 : 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+            onChanged: (value) => setState(() => module['name'] = value),
+            validator:
+                (value) =>
+                    value!.trim().isEmpty ? 'Module name is required' : null,
           ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(isMobile ? 16 : 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: module['name'],
-                      decoration: InputDecoration(
-                        labelText: 'Module Name',
-                        hintText: 'Enter module name (e.g., Introduction)',
-                        hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
-                        prefixIcon: const Icon(
-                          Icons.library_books,
-                          color: Color(0xFFFF6949),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
-                        labelStyle: GoogleFonts.poppins(
-                          color: Colors.grey[700],
-                          fontSize: 16,
-                        ),
-                      ),
-                      onChanged:
-                          (value) => setState(() => module['name'] = value),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Tooltip(
-                    message: 'Delete Module',
-                    child: IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.redAccent),
-                      onPressed: () => _confirmDeleteModule(moduleIndex),
-                    ),
-                  ),
-                ],
+          trailing: Tooltip(
+            message: 'Click to expand/collapse module',
+            child: RotationTransition(
+              turns: Tween<double>(begin: 0, end: 0.5).animate(
+                CurvedAnimation(
+                  parent: AnimationController(
+                    vsync: this,
+                    duration: const Duration(milliseconds: 200),
+                  )..forward(from: isExpanded ? 0.5 : 0),
+                  curve: Curves.easeInOut,
+                ),
               ),
-              const SizedBox(height: 16),
-              ...module['lessons'].asMap().entries.map((lessonEntry) {
-                final lessonIndex = lessonEntry.key;
-                return FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              child: Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.grey[600],
+                size: 20,
+              ),
+            ),
+          ),
+          tilePadding: EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: isMobile ? 8 : 12,
+          ),
+          childrenPadding: const EdgeInsets.only(
+            bottom: 16,
+            left: 16,
+            right: 16,
+          ),
+          backgroundColor: Colors.white,
+          collapsedBackgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          onExpansionChanged: (expanded) {
+            setState(() {
+              _modules[moduleIndex]['isExpanded'] = expanded;
+            });
+          },
+          children: [
+            ...module['lessons'].asMap().entries.map((lessonEntry) {
+              final lessonIndex = lessonEntry.key;
+              final lesson = lessonEntry.value;
+              final isLessonExpanded = lesson['isExpanded'] ?? false;
+
+              return Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                child: ExpansionTile(
+                  leading: const Icon(Icons.bookmark, color: Color(0xFFFF6949)),
+                  title: TextFormField(
+                    initialValue: lesson['name'],
+                    decoration: InputDecoration(
+                      hintText: 'Enter lesson name (e.g., Course Overview)',
+                      hintStyle: GoogleFonts.poppins(color: Colors.grey[500]),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
                     ),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: EdgeInsets.all(isMobile ? 12 : 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  initialValue: lessonEntry.value['name'],
-                                  decoration: InputDecoration(
-                                    labelText: 'Lesson Name',
-                                    hintText:
-                                        'Enter lesson name (e.g., Course Overview)',
-                                    hintStyle: GoogleFonts.poppins(
-                                      color: Colors.grey[500],
-                                    ),
-                                    prefixIcon: const Icon(
-                                      Icons.bookmark,
-                                      color: Color(0xFFFF6949),
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    labelStyle: GoogleFonts.poppins(
-                                      color: Colors.grey[700],
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  onChanged:
-                                      (value) => setState(
-                                        () =>
-                                            module['lessons'][lessonIndex]['name'] =
-                                                value,
-                                      ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Tooltip(
-                                message: 'Delete Lesson',
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.delete,
-                                    color: Colors.redAccent,
-                                  ),
-                                  onPressed:
-                                      () => _confirmDeleteLesson(
-                                        moduleIndex,
-                                        lessonIndex,
-                                      ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          _buildLessonContent(moduleIndex, lessonIndex),
-                        ],
+                    style: GoogleFonts.poppins(
+                      fontSize: isMobile ? 14 : 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                    onChanged:
+                        (value) => setState(() => lesson['name'] = value),
+                    validator:
+                        (value) =>
+                            value!.trim().isEmpty
+                                ? 'Lesson name is required'
+                                : null,
+                  ),
+                  trailing: Tooltip(
+                    message: 'Click to expand/collapse lesson',
+                    child: RotationTransition(
+                      turns: Tween<double>(begin: 0, end: 0.5).animate(
+                        CurvedAnimation(
+                          parent: AnimationController(
+                            vsync: this,
+                            duration: const Duration(milliseconds: 200),
+                          )..forward(from: isLessonExpanded ? 0.5 : 0),
+                          curve: Curves.easeInOut,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.grey[600],
+                        size: 20,
                       ),
                     ),
                   ),
-                );
-              }).toList(),
-              const SizedBox(height: 12),
-              _buildModernButton(
+                  tilePadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: isMobile ? 6 : 8,
+                  ),
+                  childrenPadding: const EdgeInsets.only(
+                    bottom: 12,
+                    left: 12,
+                    right: 12,
+                  ),
+                  backgroundColor: Colors.grey[50],
+                  collapsedBackgroundColor: Colors.grey[50],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  onExpansionChanged: (expanded) {
+                    setState(() {
+                      lesson['isExpanded'] = expanded;
+                    });
+                  },
+                  children: [_buildLessonContent(moduleIndex, lessonIndex)],
+                ),
+              );
+            }).toList(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: _buildModernButton(
                 label: 'Add Lesson',
                 icon: Icons.add,
                 onPressed: () => _addLesson(moduleIndex),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -996,14 +1023,14 @@ class _CourseEditorState extends State<CourseEditor>
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.grey[100],
       body:
           _isLoading
-              ? const LoadingIndicator() // Replaced CircularProgressIndicator with LoadingIndicator
+              ? const LoadingIndicator()
               : CustomScrollView(
                 slivers: [
                   SliverAppBar(
-                    expandedHeight: 200,
+                    expandedHeight: 180,
                     floating: false,
                     pinned: true,
                     toolbarHeight: 60,
@@ -1017,7 +1044,6 @@ class _CourseEditorState extends State<CourseEditor>
                           color: Colors.white,
                           fontSize: isMobile ? 18 : 22,
                         ),
-                        textAlign: TextAlign.center,
                       ),
                       background: Container(
                         decoration: const BoxDecoration(
@@ -1039,9 +1065,9 @@ class _CourseEditorState extends State<CourseEditor>
                         vertical: 16,
                       ),
                       child: Card(
-                        elevation: 8,
+                        elevation: 6,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                         child: Padding(
                           padding: EdgeInsets.all(isMobile ? 16 : 24),
@@ -1092,17 +1118,17 @@ class _CourseEditorState extends State<CourseEditor>
                                     filled: true,
                                     fillColor: Colors.white,
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide.none,
                                     ),
                                     enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(
-                                        color: Colors.grey[200]!,
+                                        color: Colors.grey[300]!,
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(12),
                                       borderSide: const BorderSide(
                                         color: Color(0xFFFF6949),
                                         width: 2,
@@ -1110,7 +1136,7 @@ class _CourseEditorState extends State<CourseEditor>
                                     ),
                                     labelStyle: GoogleFonts.poppins(
                                       color: Colors.grey[700],
-                                      fontSize: 16,
+                                      fontSize: isMobile ? 14 : 16,
                                     ),
                                   ),
                                   items:
@@ -1126,9 +1152,9 @@ class _CourseEditorState extends State<CourseEditor>
                                         );
                                       }).toList(),
                                   onChanged: (String? newValue) {
-                                    setState(() {
-                                      _selectedCategory = newValue;
-                                    });
+                                    setState(
+                                      () => _selectedCategory = newValue,
+                                    );
                                   },
                                   validator:
                                       (value) =>
@@ -1148,8 +1174,9 @@ class _CourseEditorState extends State<CourseEditor>
                                 Text(
                                   'Thumbnail',
                                   style: GoogleFonts.poppins(
-                                    fontSize: 18,
+                                    fontSize: isMobile ? 16 : 18,
                                     fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -1190,7 +1217,7 @@ class _CourseEditorState extends State<CourseEditor>
                                       children: [
                                         ClipRRect(
                                           borderRadius: BorderRadius.circular(
-                                            16,
+                                            12,
                                           ),
                                           child: Image.network(
                                             _selectedThumbnail != null
@@ -1232,11 +1259,11 @@ class _CourseEditorState extends State<CourseEditor>
                                               Icons.close,
                                               color: Colors.redAccent,
                                             ),
-                                            onPressed: () {
-                                              setState(
-                                                () => _selectedThumbnail = null,
-                                              );
-                                            },
+                                            onPressed:
+                                                () => setState(
+                                                  () =>
+                                                      _selectedThumbnail = null,
+                                                ),
                                           ),
                                       ],
                                     ),
@@ -1245,8 +1272,9 @@ class _CourseEditorState extends State<CourseEditor>
                                 Text(
                                   'Modules',
                                   style: GoogleFonts.poppins(
-                                    fontSize: 18,
+                                    fontSize: isMobile ? 16 : 18,
                                     fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
                                   ),
                                 ),
                                 const SizedBox(height: 12),

@@ -37,27 +37,32 @@ class _LoginPageState extends State<LoginPage> {
         final interaction = Interaction(
           userId: user.uid,
           action: 'login',
-          details: 'User logged in: $email',
+          details: 'User logged in: $email, role: $role',
           timestamp: Timestamp.now(),
         );
         await _firestoreService.logInteraction(interaction);
 
-        if (email.endsWith('@adminhlms.com') && role == 'admin') {
+        print(
+          'Login - Email: $email, Role: $role at ${DateTime.now()}',
+        ); // Debug log
+
+        if (role == 'admin') {
           Navigator.pushReplacementNamed(context, Routes.adminDashboard);
-        } else if (email.endsWith('@lecturerhlms.com') && role == 'lecturer') {
+        } else if (role == 'lecturer') {
           Navigator.pushReplacementNamed(context, Routes.lecturerDashboard);
         } else if (role == 'student' || role == null) {
           Navigator.pushReplacementNamed(context, Routes.dashboard);
         } else {
-          _showSnackBar('Login failed');
+          _showSnackBar('Unsupported role: $role. Please contact support.');
           _passwordController.clear();
         }
       } else {
-        _showSnackBar('Login failed');
+        _showSnackBar('Invalid email or password. Please try again.');
         _passwordController.clear();
       }
     } catch (e) {
-      _showSnackBar('Login failed');
+      print('Login error: $e at ${DateTime.now()}'); // Debug error
+      _showSnackBar('Login failed: ${e.toString()}. Check your credentials.');
       _passwordController.clear();
     } finally {
       setState(() => isLoading = false);
@@ -74,7 +79,7 @@ class _LoginPageState extends State<LoginPage> {
             Expanded(
               child: Text(
                 message,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
+                style: TextStyle(color: Colors.white, fontSize: 16),
               ),
             ),
           ],

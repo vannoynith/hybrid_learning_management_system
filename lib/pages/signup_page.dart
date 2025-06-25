@@ -20,50 +20,89 @@ class _SignUpPageState extends State<SignupPage> {
   bool _obscureText = true;
 
   Future<void> _signUp() async {
+    if (isLoading) return; // Prevent multiple simultaneous sign-ups
     setState(() => isLoading = true);
     try {
       final email = _emailController.text.trim().toLowerCase();
       final username = _usernameController.text.trim();
+      final password = _passwordController.text.trim();
+
+      // Input validation
+      if (username.isEmpty) {
+        _showSnackBar('Please enter a username.', isError: true);
+        return;
+      }
+      if (email.isEmpty) {
+        _showSnackBar('Please enter an email address.', isError: true);
+        return;
+      }
+      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+        _showSnackBar('Please enter a valid email address.', isError: true);
+        return;
+      }
+      if (password.isEmpty) {
+        _showSnackBar('Please enter a password.', isError: true);
+        return;
+      }
+      if (password.length < 6) {
+        _showSnackBar(
+          'Password must be at least 6 characters long.',
+          isError: true,
+        );
+        return;
+      }
 
       // Check if the email belongs to admin or lecturer domains
       if (email.endsWith('@adminhlms.com') ||
           email.endsWith('@lecturerhlms.com')) {
-        _showSnackBar('Sign-up failed');
-        _passwordController.clear();
-        return;
-      }
-
-      // Validate username
-      if (username.isEmpty) {
-        _showSnackBar('Sign-up failed');
-        _passwordController.clear();
+        _showSnackBar(
+          'Admin or lecturer emails cannot be used for student sign-up.',
+          isError: true,
+        );
         return;
       }
 
       // Sign up as a student
-      await _authService.signUp(
-        email,
-        _passwordController.text.trim(),
-        'student',
-        username: username,
-      );
+      await _authService.signUp(email, password, 'student', username: username);
 
-      // Navigate to the student dashboard
-      Navigator.pushReplacementNamed(context, Routes.dashboard);
+      // Show success SnackBar
+      _showSnackBar('Sign-up successful! Please log in.', isError: false);
+
+      // Navigate to the login page
+      await Future.delayed(
+        const Duration(seconds: 2),
+      ); // Allow SnackBar to be visible
+      Navigator.pushReplacementNamed(context, Routes.login);
     } catch (e) {
-      _showSnackBar('Sign-up failed');
-      _passwordController.clear();
+      // Handle specific Firebase errors
+      String errorMessage = 'Sign-up failed. Please try again.';
+      if (e.toString().contains('email-already-in-use')) {
+        errorMessage = 'This email is already registered.';
+      } else if (e.toString().contains('weak-password')) {
+        errorMessage = 'Password is too weak. Use at least 6 characters.';
+      } else if (e.toString().contains('invalid-email')) {
+        errorMessage = 'Invalid email format.';
+      } else if (e.toString().contains('network-request-failed')) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else {
+        errorMessage = 'Sign-up failed: ${e.toString()}';
+      }
+      _showSnackBar(errorMessage, isError: true);
     } finally {
       setState(() => isLoading = false);
+      _passwordController.clear();
     }
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(String message, {required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.error, color: Colors.white),
+            Icon(
+              isError ? Icons.error : Icons.check_circle,
+              color: Colors.white,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -73,7 +112,10 @@ class _SignUpPageState extends State<SignupPage> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFFEF4444), // Red for error
+        backgroundColor:
+            isError
+                ? const Color(0xFFEF4444)
+                : const Color(0xFF10B981), // Red for error, green for success
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -157,17 +199,16 @@ class _SignUpPageState extends State<SignupPage> {
                     obscureText: _obscureText,
                   ),
                   SizedBox(height: constraints.maxHeight * 0.04),
-                  isLoading
-                      ? const LoadingIndicator()
-                      : Center(
-                        child: CustomButton(
-                          text: 'Sign Up',
-                          onPressed: _signUp,
-                          // width: constraints.maxWidth * 0.6,
-                        ),
-                      ),
+                  Center(
+                    // Added to center the button
+                    child: CustomButton(
+                      text: 'Sign Up',
+                      onPressed: () => _signUp(), // Button always enabled
+                    ),
+                  ),
                   SizedBox(height: constraints.maxHeight * 0.02),
                   Center(
+                    // Added to center the TextButton
                     child: TextButton(
                       onPressed: () {
                         Navigator.pushNamed(context, Routes.login);

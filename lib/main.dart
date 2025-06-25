@@ -10,10 +10,15 @@ import 'package:hybridlms/pages/lecturer/change_password_for_lecturer_page.dart'
 import 'package:hybridlms/pages/lecturer/content_viewer_page.dart';
 import 'package:hybridlms/pages/lecturer/course_editor.dart';
 import 'package:hybridlms/pages/lecturer/course_management_page.dart';
+import 'package:hybridlms/pages/lecturer/create_class_token_page.dart';
 import 'package:hybridlms/pages/lecturer/file_preview_page.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_dashboard.dart';
 import 'package:hybridlms/pages/lecturer/lecturer_settings_page.dart';
 import 'package:hybridlms/pages/lecturer/update_course_page.dart';
+import 'package:hybridlms/pages/student/change_password_page.dart';
+import 'package:hybridlms/pages/student/course_detail_page.dart';
+import 'package:hybridlms/pages/student/dashboard_page.dart';
+import 'package:hybridlms/pages/student/profile_edit_page.dart';
 import 'package:hybridlms/routes.dart';
 import 'package:hybridlms/theme.dart';
 import 'package:hybridlms/pages/signup_page.dart';
@@ -52,11 +57,29 @@ class MyApp extends StatelessWidget {
               (context) => const FadeTransitionPage(child: LoginPage()),
           Routes.signup:
               (context) => const FadeTransitionPage(child: SignupPage()),
-          Routes.analytics:
-              (context) => const FadeTransitionPage(child: AnalyticsPage()),
-          Routes.assignment:
-              (context) => const FadeTransitionPage(child: AssignmentPage()),
-          Routes.chat: (context) => const FadeTransitionPage(child: ChatPage()),
+
+          //student
+          Routes.dashboard:
+              (context) => const FadeTransitionPage(child: DashboardPage()),
+          Routes.profileEdit:
+              (context) => const FadeTransitionPage(child: ProfileEditPage()),
+          Routes.changePassword:
+              (context) => const FadeTransitionPage(
+                child: ChangePasswordForStudentPage(),
+              ),
+          Routes.courseDetail:
+              (context) => FadeTransitionPage(
+                child: CourseDetailPage(
+                  arguments:
+                      ModalRoute.of(context)!.settings.arguments
+                          as Map<String, dynamic>?,
+                ),
+              ),
+          // Routes.analytics:
+          //     (context) => const FadeTransitionPage(child: AnalyticsPage()),
+          // Routes.assignment:
+          //     (context) => const FadeTransitionPage(child: AssignmentPage()),
+          // Routes.chat: (context) => const FadeTransitionPage(child: ChatPage()),
 
           //admin
           Routes.adminDashboard:
@@ -99,6 +122,9 @@ class MyApp extends StatelessWidget {
               ),
           Routes.filePreviewPage:
               (context) => const FadeTransitionPage(child: FilePreviewPage()),
+          Routes.createClassToken:
+              (context) =>
+                  const FadeTransitionPage(child: CreateClassTokenPage()),
         },
       ),
     );
